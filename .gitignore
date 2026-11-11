@@ -11,7 +11,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# FastF1 raw cache and driver headshots: never committed
+# Raw API cache (OpenF1, Wikipedia) and driver headshots: never committed
 data/cache/
 data/headshots/
 
