@@ -40,4 +40,4 @@ python -m f1rag.eval
 - Docstrings: every function gets a one-line docstring that says exactly what it does. Start with a capital letter and do not end with a full stop (e.g. `"""Reject any SQL statement that is not a single SELECT"""`).
 - Git: work on the `dev` branch, never commit to `main`. Commit messages are short imperative sentences (e.g. "Add SQL guard"), no `type:` prefixes. I never run `git commit` or `git push`; the owner does. At the end of each phase, give the exact commands to push `dev`, the PR title and description for dev -> main, and the tag command (e.g. `v0.1-phase0`).
 - Build log: keep `docs/build-log.md` updated for the owner's personal use. It is git-ignored: never stage or commit it. After each task, append a dated entry: what was done, files changed, key decisions and why, and anything left open. Never write secrets or `.env` values in it.
-- Open decisions (Section 14) are undecided unless marked. Ask. Decided: Q1 = 2024 and 2025.
+- Open decisions (Section 14) are undecided unless marked. Ask. Decided: Q1 = 2024 and 2025; Q2 = `gemini-3.5-flash-lite` (free quota 500 requests/day, 15/min; confirm tool calling in Phase 0 task 3).
