@@ -1,0 +1,40 @@
+# F1 Race Summarizer & RAG Chatbot
+
+Zero-cost portfolio project. Answers Formula 1 race questions from ingested data by routing to SQL (statistics), a vector DB (narrative text), or both, and cites evidence for every fact. Goal: showcase RAG, vector search, LLM tool calling, grounded answers and clear data provenance. Python.
+
+**Source of truth:** `docs/planning-design.md`. Read the relevant section before building. If code and the doc disagree, ask. When a decision changes, update the doc and this file. Anything outside the MVP is a Future Enhancement (Section 13): do not build it.
+
+## MVP scope
+2024 and 2025 seasons, Race sessions only, lap-level data. Manual CLI ingestion. No scheduler, live data, telemetry, team radio, Ollama, MCP or React. Pit data is pit-lane time, never stationary time.
+
+## Rules
+1. Ingestion and querying are separate; the query path only reads.
+2. Facts come from tools, never model memory. Driver-team pairing comes from the `entries` table for that race.
+3. Four tools: `find_race`, `run_sql`, `search_docs`, `get_data_coverage`.
+4. `run_sql` is SELECT-only, enforced in code (read-only connection, authorizer, row and time caps), not by the prompt.
+5. Every tool result becomes an evidence ID (E1, E2…). Answers cite only IDs that exist.
+6. The dashboard comes from a validated JSON spec. The model picks widgets; code fetches the data. Model text never supplies chart data.
+7. Ingestion is idempotent and resumable. Every row and chunk carries `season` and `round`.
+8. If data is missing, say so and state coverage. Never guess.
+
+## Guardrails
+- Never commit or print `.env`, the FastF1 cache or headshot images. Avatars default to initials; headshots only via `SHOW_HEADSHOTS=true`, at runtime.
+- Send only public data to Gemini. No F1, FIA or team logos. No paid services.
+- HTML-escape database text in the UI.
+- Stack: Python 3.10+, fastf1, pandas, SQLite, chromadb (default embeddings), google-genai (model from `GEMINI_MODEL`), streamlit, plotly, pydantic, pytest, ruff. No LangChain. Ask before adding dependencies.
+
+## Commands
+```
+python -m f1rag.ingest --year 2025 --gp "<name>"   # or --all
+streamlit run src/f1rag/ui/app.py
+pytest && ruff check .
+python -m f1rag.eval
+```
+
+## Workflow
+- Follow the Section 11 roadmap one phase at a time, starting at Phase 0. Meet each exit criterion.
+- Plan in a few lines first and wait for approval on architecture changes. Keep steps small and runnable; run tests and lint before calling a task done; suggest a commit message.
+- Write tests first for `sql_guard`, idempotency, chunking, `find_race` and spec validation.
+- Choose the simplest solution that meets the requirement. Briefly explain non-obvious choices: the owner is learning.
+- Never invent F1 data, results or quotes. Use labelled placeholders or small fixtures.
+- Open decisions (Section 14) are undecided unless marked. Ask. Decided: Q1 = 2024 and 2025.
