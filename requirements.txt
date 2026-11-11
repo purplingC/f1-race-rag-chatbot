@@ -1,0 +1,12 @@
+# Pinned dependencies. Verified to install together on Python 3.13.
+# Race data comes from the OpenF1 REST API (see planning doc Appendix E.1)
+requests==2.34.2
+pandas==2.3.3
+
+# Gemini API client and .env loading
+google-genai==3.1.0
+python-dotenv==1.2.4
+
+# Tests and lint
+pytest==9.2.0
+ruff==0.17.4
