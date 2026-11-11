@@ -1,0 +1,14 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+# FastF1 raw cache and any downloaded headshots must never be committed
+data/cache/
+data/headshots/
+.DS_Store
+
+# Planning docs are local only for now
+docs/
