@@ -5,7 +5,10 @@ Zero-cost portfolio project. Answers Formula 1 race questions from ingested data
 **Source of truth:** `docs/planning-design.md`. Read the relevant section before building. If code and the doc disagree, ask. When a decision changes, update the doc and this file. Anything outside the MVP is a Future Enhancement (Section 13): do not build it.
 
 ## MVP scope
-2024 and 2025 seasons, Race sessions only, lap-level data. Manual CLI ingestion. No scheduler, live data, telemetry, team radio, Ollama, MCP or React. Pit data is pit-lane time, never stationary time.
+2024 and 2025 seasons, Race sessions only, lap-level data. Manual CLI ingestion. No scheduler, live data, telemetry, team radio, Ollama, MCP or React. Pit data is pit-lane time (OpenF1 `lane_duration`), never stationary time.
+
+## Data source
+OpenF1 (`api.openf1.org/v1`), historical data only: free, no login, 2023 onwards, limit 3 requests/s and 30/min. Do not use FastF1 for data: since Oct 2026 it needs a paid F1TV login (see Appendix E.1 of the planning doc). OpenF1 data is CC BY-NC-SA 4.0: keep the project non-commercial and ship a third-party-data notice with any sample database.
 
 ## Rules
 1. Ingestion and querying are separate; the query path only reads.
@@ -18,10 +21,10 @@ Zero-cost portfolio project. Answers Formula 1 race questions from ingested data
 8. If data is missing, say so and state coverage. Never guess.
 
 ## Guardrails
-- Never commit or print `.env`, the FastF1 cache or headshot images. Avatars default to initials; headshots only via `SHOW_HEADSHOTS=true`, at runtime.
+- Never commit or print `.env`, the raw API cache or headshot images. Avatars default to initials; headshots only via `SHOW_HEADSHOTS=true`, at runtime.
 - Send only public data to Gemini. No F1, FIA or team logos. No paid services.
 - HTML-escape database text in the UI.
-- Stack: Python 3.10+, fastf1, pandas, SQLite, chromadb (default embeddings), google-genai (model from `GEMINI_MODEL`), streamlit, plotly, pydantic, pytest, ruff. No LangChain. Ask before adding dependencies.
+- Stack: Python 3.10+, requests (OpenF1), pandas, SQLite, chromadb (default embeddings), google-genai (model from `GEMINI_MODEL`), streamlit, plotly, pydantic, pytest, ruff. No LangChain. Ask before adding dependencies.
 
 ## Commands
 ```

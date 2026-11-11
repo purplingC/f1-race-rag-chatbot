@@ -1,6 +1,6 @@
-# Phase 0 dependencies, pinned. Verified to install together on Python 3.13.
-# Race data (fastf1 3.9.2 requires pandas 2.3.x)
-fastf1==3.9.2
+# Pinned dependencies. Verified to install together on Python 3.13.
+# Race data comes from the OpenF1 REST API (see planning doc Appendix E.1)
+requests==2.34.2
 pandas==2.3.3
 
 # Gemini API client and .env loading
