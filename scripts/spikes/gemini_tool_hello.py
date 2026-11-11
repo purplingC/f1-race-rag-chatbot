@@ -6,7 +6,10 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-PROMPT = "What was the fastest lap time of driver VER? Use the tool to find out"
+PROMPT = (
+    "What was the fastest lap time of driver VER (Max Verstappen) at the 2026 Bahrain "
+    "Grand Prix in Malaysia? Use the tool to find out"
+)
 
 DUMMY_TOOL = types.FunctionDeclaration(
     name="get_dummy_lap_time",

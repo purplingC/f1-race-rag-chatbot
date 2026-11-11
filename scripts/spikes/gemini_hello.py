@@ -5,7 +5,10 @@ import os
 from dotenv import load_dotenv
 from google import genai
 
-PROMPT = "Say hello to a Formula 1 fan in one short sentence"
+PROMPT = (
+    "Say hello to a fan of Max Verstappen ahead of the 2026 Bahrain Grand Prix "
+    "in Malaysia, in one short sentence"
+)
 
 
 def main():
