@@ -28,6 +28,7 @@ OpenF1 (`api.openf1.org/v1`), historical data only: free, no login, 2023 onwards
 
 ## Commands
 ```
+pip install -r requirements.txt && pip install -e .   # once per virtual environment
 python -m f1rag.ingest --year 2025 --gp "<name>"   # or --all
 streamlit run src/f1rag/ui/app.py
 pytest && ruff check .

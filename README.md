@@ -40,10 +40,26 @@ Requires Python 3.10 or newer (tested on 3.13).
 python3.13 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+pip install -e .
 cp .env.example .env
 ```
 
+`pip install -e .` installs the project itself in editable mode, so `python -m f1rag...` commands work from anywhere and code changes take effect without reinstalling.
+
 Then edit `.env` and set `GEMINI_API_KEY` to a free key from [Google AI Studio](https://aistudio.google.com). No billing is needed. `.env` is git-ignored: never commit it.
+
+## Load race data
+
+Race data comes from OpenF1 and goes into a local SQLite database, `data/f1_stats.db` (git-ignored). No key is needed.
+
+```bash
+python -m f1rag.ingest --year 2026 --gp "Kuala Lumpur"   # one race
+python -m f1rag.ingest --year 2026 --all                # every finished race of the season
+```
+
+- `--gp` matches the race name, location, country or circuit. Cancelled races are skipped with a note, and a query that matches several races lists them instead of guessing.
+- `--all` is resumable: a rerun skips rounds already loaded and retries failed ones. A first run takes roughly 15 to 20 minutes per season because OpenF1 is called politely (one request every 2.5 seconds); later runs read from the cache.
+- `--refresh` asks OpenF1 again and reloads everything; `--db` uses another database file.
 
 ## Try the Phase 0 spikes
 

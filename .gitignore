@@ -10,6 +10,8 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
+*.egg-info/
+build/
 
 # Raw API cache (OpenF1, Wikipedia) and driver headshots: never committed
 data/cache/
