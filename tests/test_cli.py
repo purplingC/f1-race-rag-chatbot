@@ -107,6 +107,28 @@ class FakeIngest:
         return {"laps": 10, "results": 2}
 
 
+class FakeText:
+    """A stand-in for the Wikipedia text loader that records calls and can be made to fail"""
+
+    def __init__(self):
+        """Start with no calls and no failures"""
+        self.calls = []
+        self.fail = {}
+
+    def __call__(self, season, entry, ingested_at):
+        """Record the round, raise the planned error for it, else return a chunk count"""
+        self.calls.append(entry["round"])
+        if entry["round"] in self.fail:
+            raise self.fail[entry["round"]]
+        return 7
+
+
+@pytest.fixture
+def text():
+    """Return a recording fake for the Wikipedia text loader"""
+    return FakeText()
+
+
 @pytest.fixture
 def ingest(monkeypatch):
     """Replace the real race loader with a recording fake"""
@@ -130,11 +152,12 @@ def conn():
     connection.close()
 
 
-def run(conn, client, *argv):
+def run(conn, client, *argv, text_loader=None):
     """Parse the arguments and run the CLI logic, returning the summary and the printed lines"""
     lines = []
     args = cli.parse_args(["--year", "2026", *argv])
-    summary = cli.run(args, conn, client, NOW, say=lines.append)
+    loader = text_loader or (lambda season, entry, ingested_at: 0)
+    summary = cli.run(args, conn, client, NOW, say=lines.append, text_loader=loader)
     return summary, lines
 
 
@@ -179,7 +202,10 @@ def test_gp_loads_the_one_held_match_and_notes_the_cancelled_one(conn, client, i
     """Check that a country with a cancelled and a held race loads the held one and says so"""
     summary, lines = run(conn, client, "--gp", "Betaland")
     assert ingest.calls == [2]
-    assert [r["round"] for r, _ in summary.loaded] == [2]
+    assert [(r["round"], source) for r, source, _ in summary.loaded] == [
+        (2, "openf1"),
+        (2, "wikipedia"),
+    ]
     assert any("Placeholder Beta Grand Prix" in line and "cancelled" in line for line in lines)
     assert summary.exit_code == 0
 
@@ -237,11 +263,12 @@ def test_all_loads_finished_races_in_round_order(conn, client, ingest):
     """Check that --all loads finished races by round and skips the unfinished one"""
     summary, lines = run(conn, client, "--all")
     assert ingest.calls == [1, 2, 3]
-    assert [r["round"] for r, _ in summary.loaded] == [1, 2, 3]
+    assert [r["round"] for r, source, _ in summary.loaded if source == "openf1"] == [1, 2, 3]
     assert [r["round"] for r in summary.not_finished] == [4]
     assert [m["meeting_name"] for m in summary.cancelled] == ["Placeholder Beta Grand Prix"]
     assert summary.exit_code == 0
-    assert "3 loaded" in summary.totals_line() and "1 cancelled" in summary.totals_line()
+    # Counts are per race and source: 3 races with race data and text
+    assert "6 loaded" in summary.totals_line() and "1 cancelled" in summary.totals_line()
 
 
 def test_all_skips_rounds_already_logged_as_ok(conn, client, ingest):
@@ -249,7 +276,7 @@ def test_all_skips_rounds_already_logged_as_ok(conn, client, ingest):
     cli.log_load(conn, 2026, 2, "ok", 12, None, NOW)
     summary, _ = run(conn, client, "--all")
     assert ingest.calls == [1, 3]
-    assert [r["round"] for r in summary.already] == [2]
+    assert [(r["round"], source) for r, source in summary.already] == [(2, "openf1")]
 
 
 def test_all_with_refresh_loads_everything_again(conn, client, ingest):
@@ -262,7 +289,7 @@ def test_all_with_refresh_loads_everything_again(conn, client, ingest):
 def test_ingest_log_records_the_row_count_source_and_time(conn, client, ingest):
     """Check that each successful load adds one ingest_log row with the counts"""
     run(conn, client, "--gp", "Alphaville")
-    assert logged(conn) == [(1, "openf1", "ok", 12, None)]
+    assert logged(conn) == [(1, "openf1", "ok", 12, None), (1, "wikipedia", "ok", 0, None)]
     stamp = conn.execute("SELECT ts FROM ingest_log").fetchone()[0]
     assert stamp == NOW.isoformat()
 
@@ -273,13 +300,14 @@ def test_a_failed_round_is_logged_and_the_run_goes_on(conn, client, ingest):
     summary, lines = run(conn, client, "--all")
     assert ingest.calls == [1, 2, 3]
     assert summary.exit_code == 1
-    assert [r["round"] for r, _ in summary.failed] == [2]
-    assert [row[:3] for row in logged(conn)] == [
+    assert [(r["round"], source) for r, source, _ in summary.failed] == [(2, "openf1")]
+    data_rows = [row for row in logged(conn) if row[1] == "openf1"]
+    assert [row[:3] for row in data_rows] == [
         (1, "openf1", "ok"),
         (2, "openf1", "failed"),
         (3, "openf1", "ok"),
     ]
-    assert "Driver number 99" in logged(conn)[1][4]
+    assert "Driver number 99" in data_rows[1][4]
     assert any("Driver number 99" in line for line in lines)
 
 
@@ -301,7 +329,11 @@ def test_rate_limit_stops_the_run_so_it_can_be_resumed(conn, client, ingest):
     assert ingest.calls == [1, 2]
     assert summary.exit_code == 1
     assert summary.stopped
-    assert [row[:3] for row in logged(conn)] == [(1, "openf1", "ok"), (2, "openf1", "failed")]
+    assert [row[:3] for row in logged(conn)] == [
+        (1, "openf1", "ok"),
+        (1, "wikipedia", "ok"),
+        (2, "openf1", "failed"),
+    ]
     assert any("rate limit" in line.lower() for line in lines)
 
 
@@ -318,18 +350,78 @@ def test_main_uses_the_given_database_and_prints_progress(tmp_path, client, inge
     """Check that main creates the database file, loads the race and prints a summary line"""
     db_path = tmp_path / "sub" / "test.db"
     argv = ["--year", "2026", "--gp", "Alphaville", "--db", str(db_path)]
-    code = cli.main(argv, client=client, now=NOW)
+    code = cli.main(argv, client=client, now=NOW, text_loader=lambda *args: 5)
     out = capsys.readouterr().out
     assert code == 0
     assert db_path.exists()
     assert "Placeholder Alpha Grand Prix" in out
-    assert "1 loaded" in out
+    assert "2 loaded" in out
 
 
 def test_each_log_row_gets_the_time_of_its_own_load(conn, client, ingest):
     """Check that a long --all run logs when each race finished, not when the run began"""
     times = iter([NOW + timedelta(minutes=m) for m in (1, 2, 3)])
-    args = cli.parse_args(["--year", "2026", "--all"])
+    args = cli.parse_args(["--year", "2026", "--all", "--only", "data"])
     cli.run(args, conn, client, NOW, clock=lambda: next(times))
     stamps = [row[0] for row in conn.execute("SELECT ts FROM ingest_log ORDER BY id")]
     assert stamps == [(NOW + timedelta(minutes=m)).isoformat() for m in (1, 2, 3)]
+
+
+def test_only_accepts_data_or_text():
+    """Check that --only takes data or text and nothing else"""
+    with pytest.raises(SystemExit):
+        cli.parse_args(["--year", "2026", "--all", "--only", "pictures"])
+    assert cli.parse_args(["--year", "2026", "--all", "--only", "text"]).only == "text"
+    assert cli.parse_args(["--year", "2026", "--all"]).only is None
+
+
+def test_default_loads_race_data_then_text_for_each_race(conn, client, ingest, text):
+    """Check that without --only both sources load, race data first"""
+    run(conn, client, "--gp", "Alphaville", text_loader=text)
+    assert ingest.calls == [1]
+    assert text.calls == [1]
+    assert [row[1] for row in logged(conn)] == ["openf1", "wikipedia"]
+
+
+def test_only_data_skips_text(conn, client, ingest, text):
+    """Check that --only data never calls the text loader"""
+    run(conn, client, "--all", "--only", "data", text_loader=text)
+    assert ingest.calls == [1, 2, 3]
+    assert text.calls == []
+
+
+def test_only_text_skips_race_data(conn, client, ingest, text):
+    """Check that --only text never calls the race data loader"""
+    run(conn, client, "--all", "--only", "text", text_loader=text)
+    assert ingest.calls == []
+    assert text.calls == [1, 2, 3]
+
+
+def test_text_failure_is_logged_on_its_own(conn, client, ingest, text):
+    """Check that a missing article fails only the text load and the exit code is 1"""
+    text.fail[2] = LookupError("No Wikipedia article found for placeholder race")
+    summary, lines = run(conn, client, "--all", text_loader=text)
+    assert summary.exit_code == 1
+    assert [(r["round"], source) for r, source, _ in summary.failed] == [(2, "wikipedia")]
+    statuses = {(row[0], row[1]): row[2] for row in logged(conn)}
+    assert statuses[(2, "openf1")] == "ok"
+    assert statuses[(2, "wikipedia")] == "failed"
+    assert any("No Wikipedia article" in line for line in lines)
+
+
+def test_all_resumes_each_source_separately(conn, client, ingest, text):
+    """Check that a source already logged ok is skipped while the other source still loads"""
+    cli.log_load(conn, 2026, 2, "ok", 7, None, NOW, source="wikipedia")
+    run(conn, client, "--all", text_loader=text)
+    assert ingest.calls == [1, 2, 3]
+    assert text.calls == [1, 3]
+
+
+def test_text_rate_limit_also_stops_the_run(conn, client, ingest, text):
+    """Check that a Wikipedia rate limit stops the run like an OpenF1 one, to resume later"""
+    text.fail[2] = RateLimitError("Wikipedia answered 429 3 times")
+    summary, lines = run(conn, client, "--all", text_loader=text)
+    assert text.calls == [1, 2]
+    assert ingest.calls == [1, 2]
+    assert summary.stopped
+    assert any("Wikipedia text" in line and "rate limit" in line.lower() for line in lines)

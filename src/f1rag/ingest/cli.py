@@ -1,4 +1,4 @@
-"""Command line entry point: load races from OpenF1 into the local SQLite database"""
+"""Command line entry point: load race data from OpenF1 and race reports from Wikipedia"""
 
 import argparse
 import contextlib
@@ -6,11 +6,18 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from f1rag import config, store
-from f1rag.ingest import structured
-from f1rag.ingest.openf1 import OpenF1Client, RateLimitError
+from f1rag import config, store, vectors
+from f1rag.ingest import structured, text
+from f1rag.ingest.errors import RateLimitError
+from f1rag.ingest.openf1 import OpenF1Client
+from f1rag.ingest.wikipedia import WikipediaClient
 
 SOURCE = "openf1"
+TEXT_SOURCE = "wikipedia"
+# What --only selects, in loading order
+SOURCES_FOR = {None: (SOURCE, TEXT_SOURCE), "data": (SOURCE,), "text": (TEXT_SOURCE,)}
+SOURCE_NAMES = {SOURCE: "race data", TEXT_SOURCE: "Wikipedia text"}
+UNITS = {SOURCE: "rows", TEXT_SOURCE: "chunks"}
 # OpenF1 fills some data (such as pit durations) a few hours after a session ends
 SETTLE_HOURS = 6
 # Meeting fields that a --gp query is matched against, the official name is left out
@@ -56,7 +63,7 @@ def parse_args(argv=None):
     """Read the command line arguments"""
     parser = argparse.ArgumentParser(
         prog="python -m f1rag.ingest",
-        description="Load race data from OpenF1 into the local database",
+        description="Load race data from OpenF1 and race reports from Wikipedia",
     )
     parser.add_argument("--year", type=int, required=True, help="season to load, for example 2026")
     which = parser.add_mutually_exclusive_group(required=True)
@@ -72,7 +79,15 @@ def parse_args(argv=None):
         help="ask OpenF1 again instead of using saved answers, and reload rounds already loaded",
     )
     parser.add_argument(
+        "--only",
+        choices=["data", "text"],
+        help="load only race data (SQLite) or only Wikipedia text (ChromaDB), default both",
+    )
+    parser.add_argument(
         "--db", default=str(config.DB_PATH), help="database file, default data/f1_stats.db"
+    )
+    parser.add_argument(
+        "--chroma", default=str(config.CHROMA_DIR), help="vector store folder, default data/chroma"
     )
     return parser.parse_args(argv)
 
@@ -133,22 +148,22 @@ def select_race(races, cancelled, query):
     return held[0], notes
 
 
-def already_loaded(conn, season, round_no):
-    """Tell whether ingest_log already has a successful load for this round"""
+def already_loaded(conn, season, round_no, source=SOURCE):
+    """Tell whether ingest_log already has a successful load of this source for this round"""
     sql = (
         "SELECT 1 FROM ingest_log "
         "WHERE season = ? AND round = ? AND source = ? AND status = 'ok' LIMIT 1"
     )
-    return conn.execute(sql, (season, round_no, SOURCE)).fetchone() is not None
+    return conn.execute(sql, (season, round_no, source)).fetchone() is not None
 
 
-def log_load(conn, season, round_no, status, rows, message, now):
-    """Add one row to ingest_log for a finished or failed load"""
+def log_load(conn, season, round_no, status, rows, message, now, source=SOURCE):
+    """Add one row to ingest_log for a finished or failed load of one source"""
     with conn:
         conn.execute(
             "INSERT INTO ingest_log (season, round, source, status, rows, message, ts) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (season, round_no, SOURCE, status, rows, message, now.isoformat()),
+            (season, round_no, source, status, rows, message, now.isoformat()),
         )
 
 
@@ -175,8 +190,18 @@ def choose(args, races, cancelled, now, summary, say):
     return [entry]
 
 
-def run(args, conn, client, now, say=lambda line: None, clock=None):
-    """Load the chosen races, log each one, and return a summary of what happened"""
+def load_source(source, args, conn, client, entry, clock, text_loader):
+    """Load one source for one race and return how many rows or chunks were written"""
+    if source == SOURCE:
+        counts = structured.ingest_race(conn, client, args.year, entry["session"], entry["round"])
+        return sum(counts.values())
+    if text_loader is None:
+        raise ValueError("No text loader was given for Wikipedia text")
+    return text_loader(args.year, entry, clock().isoformat())
+
+
+def run(args, conn, client, now, say=lambda line: None, clock=None, text_loader=None):
+    """Load the chosen races, log each source of each race, and return a summary"""
     # clock gives the time written to ingest_log, so each load records when it finished
     clock = clock or (lambda: now)
     summary = Summary()
@@ -192,38 +217,58 @@ def run(args, conn, client, now, say=lambda line: None, clock=None):
             summary.not_finished.append(entry)
             say(f"Skipped {label}: not finished yet")
             continue
-        if args.all and not args.refresh and already_loaded(conn, args.year, entry["round"]):
-            summary.already.append(entry)
-            say(f"Skipped {label}: already loaded")
-            continue
+        for source in SOURCES_FOR[args.only]:
+            what = f"{label}, {SOURCE_NAMES[source]}"
+            if args.all and not args.refresh and already_loaded(
+                conn, args.year, entry["round"], source
+            ):
+                summary.already.append((entry, source))
+                say(f"Skipped {what}: already loaded")
+                continue
 
-        say(f"Loading {label}")
-        try:
-            counts = structured.ingest_race(
-                conn, client, args.year, entry["session"], entry["round"]
-            )
-        except RateLimitError as error:
-            message = f"{type(error).__name__}: {error}"
-            log_load(conn, args.year, entry["round"], "failed", None, message, clock())
-            summary.failed.append((entry, message))
-            summary.stopped = "OpenF1 rate limit reached, run the same command again to resume"
-            say(f"Stopped: {summary.stopped}")
+            say(f"Loading {what}")
+            try:
+                rows = load_source(source, args, conn, client, entry, clock, text_loader)
+            except RateLimitError as error:
+                message = f"{type(error).__name__}: {error}"
+                log_load(conn, args.year, entry["round"], "failed", None, message, clock(), source)
+                summary.failed.append((entry, source, message))
+                summary.stopped = (
+                    f"rate limit reached while loading {SOURCE_NAMES[source]}, "
+                    "run the same command again to resume"
+                )
+                say(f"Stopped: {summary.stopped}")
+                break
+            except Exception as error:
+                message = f"{type(error).__name__}: {error}"
+                log_load(conn, args.year, entry["round"], "failed", None, message, clock(), source)
+                summary.failed.append((entry, source, message))
+                say(f"Failed {what}: {message}")
+                continue
+
+            log_load(conn, args.year, entry["round"], "ok", rows, None, clock(), source)
+            summary.loaded.append((entry, source, rows))
+            say(f"Loaded {what}: {rows} {UNITS[source]}")
+        if summary.stopped:
             break
-        except Exception as error:
-            message = f"{type(error).__name__}: {error}"
-            log_load(conn, args.year, entry["round"], "failed", None, message, clock())
-            summary.failed.append((entry, message))
-            say(f"Failed {label}: {message}")
-            continue
-
-        rows = sum(counts.values())
-        log_load(conn, args.year, entry["round"], "ok", rows, None, clock())
-        summary.loaded.append((entry, rows))
-        say(f"Loaded {label}: {rows} rows")
     return summary
 
 
-def main(argv=None, client=None, now=None):
+def make_text_loader(args):
+    """Build the Wikipedia loader with the vector store and a cached Wikipedia client"""
+    collection = vectors.open_collection(Path(args.chroma))
+    wiki = WikipediaClient(config.CACHE_DIR / "wikipedia", refresh=args.refresh)
+
+    def load(season, entry, ingested_at):
+        """Load one race's Wikipedia text and return the chunk count"""
+        return text.ingest_race_text(
+            collection, wiki, season, entry["round"], entry["meeting"], ingested_at
+        )
+
+    return load
+
+
+def main(argv=None, client=None, now=None, text_loader=None):
     """Run the command line tool and return the exit code"""
     args = parse_args(argv)
     now_given = now is not None
@@ -234,7 +279,9 @@ def main(argv=None, client=None, now=None):
     with contextlib.closing(store.connect(db_path)) as conn:
         store.create_schema(conn)
         clock = None if now_given else (lambda: datetime.now(timezone.utc))
-        summary = run(args, conn, client, now, say=print, clock=clock)
+        if text_loader is None and TEXT_SOURCE in SOURCES_FOR[args.only]:
+            text_loader = make_text_loader(args)
+        summary = run(args, conn, client, now, say=print, clock=clock, text_loader=text_loader)
     if not summary.error:
         print(summary.totals_line())
     return summary.exit_code

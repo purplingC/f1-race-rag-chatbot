@@ -7,6 +7,10 @@ from pathlib import Path
 
 import requests
 
+from f1rag.ingest.errors import RateLimitError
+
+__all__ = ["OpenF1Client", "RateLimitError"]
+
 BASE_URL = "https://api.openf1.org/v1"
 USER_AGENT = "f1-race-rag-chatbot (portfolio project)"
 # Free limit is 3 requests/s and 30/min; waiting 2.5 s keeps us at about 24 per minute
@@ -15,10 +19,6 @@ MAX_ATTEMPTS = 3
 # Extra wait after a 429 answer: 15 s, then 30 s
 BACKOFF_S = 15
 TIMEOUT_S = 30
-
-
-class RateLimitError(Exception):
-    """Raised when OpenF1 keeps answering 429 after every retry"""
 
 
 class OpenF1Client:

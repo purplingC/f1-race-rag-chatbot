@@ -3,9 +3,10 @@
 import hashlib
 import re
 
-# The embedding model reads at most 256 word pieces, so a chunk body stays under 160 words
-# and the title and section prefix brings it to about 180
-MAX_WORDS = 160
+# The embedding model reads at most 256 word pieces; F1 text has many names and numbers that
+# split into several pieces, so on the 20 real 2026 articles 160 words left 3 chunks over the
+# limit and 140 words gives at most 221 pieces, about 150 words with the title and section
+MAX_WORDS = 140
 # Whole sentences from the end of a chunk are repeated at the start of the next one
 OVERLAP_WORDS = 30
 INTRODUCTION = "Introduction"
