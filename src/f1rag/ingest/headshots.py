@@ -1,8 +1,7 @@
-"""Driver photos: download each driver's official headshot once and make a sheet to review them
+"""Driver photos: download each driver's official headshot once and make a sheet to review them"""
 
-The photos are copyrighted by Formula 1: they stay in the git-ignored data/headshots folder,
-are never committed, and the dashboard only shows them when SHOW_HEADSHOTS=true
-"""
+# The photos are copyrighted by Formula 1: they stay in the git-ignored data/headshots folder,
+# are never committed, and the dashboard only shows them when SHOW_HEADSHOTS=true
 
 import argparse
 import contextlib
