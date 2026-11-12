@@ -34,9 +34,13 @@ class AnswerBundle:
     trace: list = field(default_factory=list)
     model: str = ""
     error: str = None
+    # A note shown with an answer that is usable but not complete, such as a draft
+    warning: str = None
     model_calls: list = field(default_factory=list)
     total_ms: int = 0
     uncited: list = field(default_factory=list)
+    # The checked dashboard plan (dashboard_planner.PlanResult), or None for no new widgets
+    dashboard: object = None
 
 
 def summarize(tool, result):

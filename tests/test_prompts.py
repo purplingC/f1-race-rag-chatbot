@@ -32,3 +32,16 @@ def test_prompt_holds_the_key_rules_and_notes():
     for phrase in phrases:
         assert phrase in text
     assert "ingest_log" not in text
+
+
+def test_final_answer_asks_for_a_dashboard_from_the_widget_registry():
+    """Check the final instruction and schema offer exactly the registered widgets"""
+    from f1rag.engine import dashboard_planner
+
+    widget_types = set(dashboard_planner.WidgetType.__args__)
+    schema = prompts.ANSWER_SCHEMA["properties"]["dashboard"]
+    listed = schema["properties"]["widgets"]["items"]["properties"]["type"]["enum"]
+    assert set(listed) == widget_types
+    assert prompts.ANSWER_SCHEMA["required"] == ["answer_md"]
+    for widget_type in widget_types:
+        assert widget_type in prompts.FINAL_INSTRUCTION

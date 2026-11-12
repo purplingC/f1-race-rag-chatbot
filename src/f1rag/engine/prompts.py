@@ -1,5 +1,7 @@
 """System prompt for the question loop and the instruction for the final JSON answer"""
 
+from f1rag.engine.dashboard_planner import WidgetType
+
 # Tables and columns described to the model, nothing else is exposed (Section 6.3)
 # A test checks that every column named here exists in store.SCHEMA
 TABLES = {
@@ -130,16 +132,51 @@ RULES = [
 ]
 
 FINAL_INSTRUCTION = (
-    "Now write the final answer for the user as JSON with one field, answer_md: Markdown "
-    "text that follows the rules and states any assumption, such as which race was used. "
-    "Every sentence that states a fact ends with its evidence id in square brackets, for "
-    "example [E2]. Leave out any fact you cannot cite. Use only facts from the tool results "
-    "above."
+    "Now write the final answer for the user as JSON. answer_md: Markdown text that follows "
+    "the rules and states any assumption, such as which race was used. Every sentence that "
+    "states a fact ends with its evidence id in square brackets, for example [E2]. Leave out "
+    "any fact you cannot cite. Use only facts from the tool results above. "
+    "dashboard: the widgets that best support the answer, for the race the answer is about "
+    "(season and round). Choose up to four of classification (final order), lap_time_chart "
+    "(lap times of the given drivers, optional laps as [first, last]), tyre_strategy, "
+    "pit_stops_table, position_chart and race_summary_card, plus driver_card for the drivers "
+    "the answer is about. At most four drivers per widget, driver codes and evidence ids only "
+    "from the tool results. The charts get their numbers from the database, so never put "
+    "numbers in the dashboard. Leave dashboard out when no race data was used."
 )
 
 ANSWER_SCHEMA = {
     "type": "object",
-    "properties": {"answer_md": {"type": "string"}},
+    "properties": {
+        "answer_md": {"type": "string"},
+        "dashboard": {
+            "type": "object",
+            "properties": {
+                "race": {
+                    "type": "object",
+                    "properties": {"season": {"type": "integer"}, "round": {"type": "integer"}},
+                    "required": ["season", "round"],
+                },
+                "widgets": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type": {"type": "string", "enum": list(WidgetType.__args__)},
+                            "drivers": {"type": "array", "items": {"type": "string"}},
+                            "laps": {
+                                "type": "array", "items": {"type": "integer"},
+                                "minItems": 2, "maxItems": 2,
+                            },
+                        },
+                        "required": ["type"],
+                    },
+                },
+                "evidence": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["race", "widgets"],
+        },
+    },
     "required": ["answer_md"],
 }
 

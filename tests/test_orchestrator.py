@@ -207,3 +207,71 @@ def test_history_is_sent_before_the_new_question(conn, collection):
     assert llm.sent[0]["contents"] == [
         ("user", "Earlier question"), ("model", "Earlier answer"), ("user", "Follow-up"),
     ]
+
+
+def final_with(text, dashboard):
+    """Build a final JSON reply that also carries a dashboard spec"""
+    return LLMReply(text=json.dumps({"answer_md": text, "dashboard": dashboard}))
+
+
+def test_a_valid_dashboard_from_the_model_is_kept(conn, collection):
+    """Check the model's dashboard spec reaches the bundle when it passes validation"""
+    spec = {"race": {"season": 2026, "round": 1}, "widgets": [{"type": "classification"}],
+            "evidence": ["E1"]}
+    llm = FakeLLM([calls(("run_sql", {"query": WINNER_SQL})), LLMReply(text="ok"),
+                   final_with("AAA won [E1].", spec)])
+    result = orchestrator.answer("Who won?", llm, conn, collection)
+    assert result.dashboard.source == "model"
+    assert [w.type for w in result.dashboard.spec.widgets] == ["classification"]
+
+
+def test_a_missing_dashboard_is_built_by_the_fallback(conn, collection):
+    """Check an answer without a spec still gets a dashboard from the rules"""
+    llm = FakeLLM([calls(("run_sql", {"query": WINNER_SQL + " AND season = 2026 AND round = 1"})),
+                   LLMReply(text="ok"), final("AAA won [E1].")])
+    result = orchestrator.answer("Who won?", llm, conn, collection)
+    assert result.dashboard.source == "fallback"
+
+
+def test_no_dashboard_when_gemini_is_unavailable(conn, collection):
+    """Check an error answer carries no dashboard"""
+    llm = FakeLLM([LLMUnavailableError("Gemini is still busy (tried 4 times)")])
+    assert orchestrator.answer("Who won?", llm, conn, collection).dashboard is None
+
+
+BUSY = "Gemini is still busy (tried 4 times). Try again in a few minutes"
+
+
+def test_draft_answer_is_used_when_only_the_final_step_fails(conn, collection):
+    """Check a busy final call still gives the cited draft, a note and a rule-based dashboard"""
+    llm = FakeLLM([
+        calls(("run_sql", {"query": WINNER_SQL + " AND season = 2026 AND round = 1"})),
+        LLMReply(text="AAA won [E1]. Unknown [E5]."),
+        LLMUnavailableError(BUSY),
+    ])
+    result = orchestrator.answer("Who won?", llm, conn, collection)
+    assert result.error is None
+    assert result.answer_md == "AAA won [E1]. Unknown."
+    assert result.cited == ["E1"]
+    assert "busy" in result.warning and "draft" in result.warning
+    assert result.dashboard.source == "fallback"
+
+
+def test_failed_model_calls_are_recorded_in_the_trace(conn, collection):
+    """Check a call that fails after its retries still appears, marked failed, with its time"""
+    llm = FakeLLM([calls(("run_sql", {"query": WINNER_SQL})), LLMUnavailableError(BUSY)])
+    result = orchestrator.answer("Who won?", llm, conn, collection)
+    assert result.error == BUSY
+    assert [c.get("failed", False) for c in result.model_calls] == [False, True]
+    failed = result.model_calls[-1]
+    assert failed["purpose"] == "tools" and failed["ms"] >= 0
+    assert failed["retries"] == 3
+
+
+def test_without_a_draft_a_failed_final_step_is_still_an_error(conn, collection):
+    """Check no draft text means the error is reported, not an empty answer"""
+    llm = FakeLLM([calls(("run_sql", {"query": WINNER_SQL})), LLMReply(text=""),
+                   LLMUnavailableError(BUSY)])
+    result = orchestrator.answer("Who won?", llm, conn, collection)
+    assert result.error == BUSY
+    assert result.model_calls[-1]["purpose"] == "final"

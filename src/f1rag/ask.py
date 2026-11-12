@@ -79,6 +79,8 @@ def evidence_lines(item):
 def render(bundle, show_trace=False):
     """Turn an answer bundle into the text printed in the terminal"""
     lines = [bundle.answer_md, ""]
+    if bundle.warning:
+        lines += [f"Note: {bundle.warning}", ""]
     if bundle.uncited:
         n = len(bundle.uncited)
         verb = "sentence has" if n == 1 else "sentences have"
@@ -86,6 +88,8 @@ def render(bundle, show_trace=False):
         lines += [f"  - {sentence}" for sentence in bundle.uncited]
         lines.append("")
     lines.append(how_line(bundle.trace))
+    if bundle.dashboard is not None:
+        lines.append(dashboard_line(bundle.dashboard))
     if bundle.evidence:
         lines += ["", "Evidence:"]
         for item in bundle.evidence:
@@ -100,7 +104,25 @@ def render(bundle, show_trace=False):
             f"{seconds:.1f} s in total):",
         ]
         lines += trace_lines(bundle)
+        if bundle.dashboard is not None and bundle.dashboard.problems:
+            problems = "; ".join(bundle.dashboard.problems)
+            lines.append(f"  Dashboard spec from the model refused: {problems}")
     return "\n".join(lines)
+
+
+def dashboard_line(plan):
+    """Describe the dashboard in one line: race, where it came from and each widget"""
+    parts = []
+    for widget in plan.spec.widgets:
+        text = widget.type
+        if widget.drivers:
+            text += " " + ", ".join(widget.drivers)
+        if widget.laps:
+            text += f" laps {widget.laps[0]}-{widget.laps[1]}"
+        parts.append(text)
+    source = "chosen by the model" if plan.source == "model" else "chosen by rules"
+    race = f"{plan.spec.race.season} round {plan.spec.race.round}"
+    return f"Dashboard ({race}, {source}): " + " · ".join(parts)
 
 
 def trace_lines(bundle):
@@ -109,8 +131,14 @@ def trace_lines(bundle):
     for call in bundle.model_calls:
         what = PURPOSES.get(call["purpose"], call["purpose"])
         retries = call["retries"]
+        seconds = f"{call['ms'] / 1000:.1f} s"
+        if call.get("failed"):
+            lines.append(
+                f"  {call['step']}. Gemini, {what}: failed after {retries + 1} attempts, {seconds}"
+            )
+            continue
         retry_text = f", {retries} retr{'y' if retries == 1 else 'ies'}" if retries else ""
-        lines.append(f"  {call['step']}. Gemini, {what}: {call['ms'] / 1000:.1f} s{retry_text}")
+        lines.append(f"  {call['step']}. Gemini, {what}: {seconds}{retry_text}")
         for step in bundle.trace:
             if step["step"] != call["step"] or call["purpose"] != "tools":
                 continue

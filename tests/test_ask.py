@@ -132,3 +132,38 @@ def test_uncited_sentences_and_model_time_are_shown(tmp_path):
         "       find_race({'name': 'Alpha'}) -> E1, ok, 2 ms",
         "  2. Gemini, writing the answer: 0.8 s",
     ]
+
+
+def test_the_chosen_dashboard_and_any_refusal_are_shown():
+    """Check the output names the widgets, the race and where the plan came from"""
+    from f1rag.engine import dashboard_planner as dp
+    from f1rag.engine.evidence import AnswerBundle
+
+    spec = dp.DashboardSpec(
+        race=dp.RaceRef(season=2026, round=1),
+        widgets=[dp.Widget(type="driver_card", drivers=["AAA", "BBB"]),
+                 dp.Widget(type="lap_time_chart", drivers=["AAA"], laps=(2, 8))],
+    )
+    plan = dp.PlanResult(spec=spec, source="fallback", problems=["widgets.0.type: bad"])
+    text = ask.render(AnswerBundle(question="Q", answer_md="A.", dashboard=plan), show_trace=True)
+    assert ("Dashboard (2026 round 1, chosen by rules): driver_card AAA, BBB · "
+            "lap_time_chart AAA laps 2-8") in text
+    assert "Dashboard spec from the model refused: widgets.0.type: bad" in text
+
+
+def test_failed_calls_and_the_draft_note_are_shown():
+    """Check the trace shows a failed call and the answer carries the draft note"""
+    from f1rag.engine.evidence import AnswerBundle
+
+    bundle = AnswerBundle(
+        question="Q", answer_md="AAA won.",
+        warning="Gemini was busy for the final step, so this is its draft answer",
+        model_calls=[
+            {"step": 1, "purpose": "tools", "ms": 1100, "retries": 0},
+            {"step": 2, "purpose": "final", "ms": 88500, "retries": 3, "failed": True},
+        ],
+        total_ms=90000,
+    )
+    text = ask.render(bundle, show_trace=True)
+    assert "Note: Gemini was busy for the final step, so this is its draft answer" in text
+    assert "  2. Gemini, writing the answer: failed after 4 attempts, 88.5 s" in text
