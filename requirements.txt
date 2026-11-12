@@ -1,7 +1,10 @@
-# Pinned dependencies. Verified to install together on Python 3.13.
+# Pinned dependencies, verified to install together on Python 3.11 and 3.13 (CI)
 # Race data comes from the OpenF1 REST API (see planning doc Appendix E.1)
 requests==2.34.2
 pandas==2.3.3
+
+# Vector store for race reports, runs locally with its own embedding model (planning doc 8.4)
+chromadb==1.5.9
 
 # Gemini API client and .env loading
 google-genai==3.1.0

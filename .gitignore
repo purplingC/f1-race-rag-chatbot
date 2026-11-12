@@ -10,10 +10,16 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
+*.egg-info/
+build/
 
-# FastF1 raw cache and driver headshots: never committed
+# Raw API cache (OpenF1, Wikipedia) and driver headshots: never committed
 data/cache/
 data/headshots/
+
+# Full local databases: the small sample database is added on purpose later
+data/*.db
+data/chroma/
 
 # Local planning docs: not committed for now
 docs/

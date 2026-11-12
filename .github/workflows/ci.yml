@@ -1,0 +1,47 @@
+# Run the lint check and all tests on every push to dev or main and on pull requests to main
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [main]
+
+# Read-only access is all the tests need
+permissions:
+  contents: read
+
+# A newer push to the same branch cancels the older run, which saves minutes
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # Oldest supported (google-genai needs 3.11) and the version used for development
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies and the project
+        run: |
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Lint
+        run: ruff check .
+
+      # No test needs the network, an API key or the embedding model
+      - name: Tests
+        run: pytest -q
