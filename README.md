@@ -4,18 +4,18 @@ A chatbot that answers Formula 1 race questions from ingested data. It routes ea
 
 ## Status
 
-Under development, version 0.2. **Phases 0 and 1 are complete**: the 2026 races are loaded into SQLite and ChromaDB. The chatbot itself (Phase 2) is not built yet.
+Under development, version 0.2. **Phases 0 and 1 are complete**: the 2026 races are loaded into SQLite and ChromaDB. **Phase 2 is in progress**: the RAG engine and command-line Q&A are built and tested with a fake model; the check with the real Gemini model is next.
 
 | Phase | Goal | Status |
 |---|---|---|
 | 0 | Setup, check that Gemini, OpenF1 and Wikipedia work | Done |
 | 1 | Ingestion into SQLite and ChromaDB | Done |
-| 2 | RAG engine: four tools, evidence IDs, command-line Q&A | Next |
+| 2 | RAG engine: four tools, evidence IDs, command-line Q&A, race summaries | In progress |
 | 3 | Streamlit interface with a query-driven dashboard | Planned |
 | 4 | Evaluation and hardening | Planned |
 | 5 | Portfolio packaging | Planned |
 
-## Planned design
+## Design
 
 - **Routing:** the model calls one or more of four tools: `find_race`, `run_sql`, `search_docs`, `get_data_coverage`.
 - **Grounded answers:** every fact comes from a tool result, and every tool result gets an evidence ID (E1, E2, ...) that the answer cites.
@@ -60,9 +60,21 @@ python -m f1rag.ingest --year 2026 --all                # every finished race of
 - `--gp` matches the race name, location, country or circuit. Cancelled races are skipped with a note, and a query that matches several races lists them instead of guessing.
 - `--all` is resumable: a rerun skips rounds already loaded and retries failed ones. A first run takes roughly 15 to 20 minutes per season because OpenF1 is called politely (one request every 2.5 seconds); later runs read from the cache.
 - `--only data` loads only the race data and `--only text` only the Wikipedia reports; the default loads both.
+- `--only summary` writes a short race summary with Gemini from the loaded data and reports (needs `GEMINI_API_KEY`, one request per race). It only runs when chosen.
 - Wikipedia is called slowly on purpose (one request every 6.5 seconds, its limit for clients that send no contact details), so text adds about 15 seconds per race on a first run.
 - The first text load downloads ChromaDB's local embedding model once (about 83 MB, into `~/.cache/chroma`).
 - `--refresh` asks both sources again and reloads everything; `--db` and `--chroma` use another database file or vector store folder.
+
+## Ask questions
+
+Needs `GEMINI_API_KEY` in `.env` and at least one loaded race.
+
+```bash
+python -m f1rag.ask "Who won the Bahrain Grand Prix in 2026?"
+python -m f1rag.ask "Why was the Bahrain race moved?" --trace
+```
+
+The answer cites evidence IDs such as `[E1]`. Below it the command lists each piece of evidence (the SQL query or the report passages with links) and, with `--trace`, every tool call the model made. One question uses about 3 to 5 Gemini requests of the free 500 a day.
 
 ## Try the Phase 0 spikes
 

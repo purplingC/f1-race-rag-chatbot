@@ -30,7 +30,8 @@ Narrative text: Wikipedia race articles (CC BY-SA 4.0) via the MediaWiki API. Ou
 ## Commands
 ```
 pip install -r requirements.txt && pip install -e .   # once per virtual environment
-python -m f1rag.ingest --year 2025 --gp "<name>"   # or --all
+python -m f1rag.ingest --year 2025 --gp "<name>"   # or --all; --only data|text|summary
+python -m f1rag.ask "<question>"   # add --trace to see every tool call
 streamlit run src/f1rag/ui/app.py
 pytest && ruff check .
 python -m f1rag.eval
