@@ -83,6 +83,8 @@ Downloaded data is cached in `data/cache/`, which is git-ignored.
 pytest && ruff check .
 ```
 
+GitHub Actions runs the same lint check and tests on Python 3.10 and 3.13 for every push to `dev` or `main` and every pull request to `main` (`.github/workflows/ci.yml`). No test needs the network, an API key or the embedding model.
+
 ## Licence and disclaimer
 
 The code is released under the [MIT licence](LICENSE). Third-party data keeps its own licence (see Data sources). F1, FORMULA ONE, FORMULA 1 and related marks are trade marks of Formula One Licensing B.V. This is an unofficial fan project, not associated with Formula 1, the FIA or any team.
