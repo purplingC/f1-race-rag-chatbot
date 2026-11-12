@@ -34,7 +34,7 @@ OpenF1 is a free community project and is not affiliated with Formula 1. Because
 
 ## Setup
 
-Requires Python 3.10 or newer (tested on 3.13).
+Requires Python 3.11 or newer (CI tests 3.11 and 3.13).
 
 ```bash
 python3.13 -m venv .venv
@@ -83,7 +83,7 @@ Downloaded data is cached in `data/cache/`, which is git-ignored.
 pytest && ruff check .
 ```
 
-GitHub Actions runs the same lint check and tests on Python 3.10 and 3.13 for every push to `dev` or `main` and every pull request to `main` (`.github/workflows/ci.yml`). No test needs the network, an API key or the embedding model.
+GitHub Actions runs the same lint check and tests on Python 3.11 and 3.13 for every push to `dev` or `main` and every pull request to `main` (`.github/workflows/ci.yml`). No test needs the network, an API key or the embedding model.
 
 ## Licence and disclaimer
 

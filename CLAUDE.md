@@ -25,7 +25,7 @@ Narrative text: Wikipedia race articles (CC BY-SA 4.0) via the MediaWiki API. Ou
 - Never commit or print `.env`, the raw API cache or headshot images. Avatars default to initials; headshots only via `SHOW_HEADSHOTS=true`, at runtime.
 - Send only public data to Gemini. No F1, FIA or team logos. No paid services.
 - HTML-escape database text in the UI.
-- Stack: Python 3.10+, requests (OpenF1), pandas, SQLite, chromadb (default embeddings), google-genai (model from `GEMINI_MODEL`), streamlit, plotly, pydantic, pytest, ruff. No LangChain. Ask before adding dependencies.
+- Stack: Python 3.11+, requests (OpenF1), pandas, SQLite, chromadb (default embeddings), google-genai (model from `GEMINI_MODEL`), streamlit, plotly, pydantic, pytest, ruff. No LangChain. Ask before adding dependencies.
 
 ## Commands
 ```

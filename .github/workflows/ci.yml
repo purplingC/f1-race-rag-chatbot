@@ -23,8 +23,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Oldest supported and the version used for development
-        python-version: ["3.10", "3.13"]
+        # Oldest supported (google-genai needs 3.11) and the version used for development
+        python-version: ["3.11", "3.13"]
     steps:
       - uses: actions/checkout@v7
 
