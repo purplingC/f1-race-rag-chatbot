@@ -1,17 +1,17 @@
 # F1 Race Summarizer & RAG Chatbot
 
-A chatbot that answers Formula 1 race questions from ingested data. It routes each question to a SQL database for statistics, a vector database for race reports and steward decisions, or both, then answers with cited evidence and a dashboard that matches the question. Built with Python, OpenF1, ChromaDB, SQLite, the Gemini API and Streamlit, entirely on free tiers. Unofficial project, not affiliated with Formula 1, the FIA or any team.
+A chatbot that answers Formula 1 race questions from ingested data. It routes each question to a SQL database for statistics, a vector database for race reports and generated race summaries, or both, then answers with cited evidence and a dashboard that matches the question. Built with Python, OpenF1, ChromaDB, SQLite, the Gemini API and Streamlit, entirely on free tiers. Unofficial project, not affiliated with Formula 1, the FIA or any team.
 
 ## Status
 
-Under development, version 0.2. **Phases 0 and 1 are complete**: the 2026 races are loaded into SQLite and ChromaDB. **Phase 2 is in progress**: the RAG engine and command-line Q&A are built and tested with a fake model; the check with the real Gemini model is next.
+Under development, version 0.3. **Phases 0 to 2 are complete**: the 2026 races are loaded into SQLite and ChromaDB, each with a generated race summary, and the command-line Q&A answers questions with cited evidence. The Streamlit interface (Phase 3) is next.
 
 | Phase | Goal | Status |
 |---|---|---|
 | 0 | Setup, check that Gemini, OpenF1 and Wikipedia work | Done |
 | 1 | Ingestion into SQLite and ChromaDB | Done |
-| 2 | RAG engine: four tools, evidence IDs, command-line Q&A, race summaries | In progress |
-| 3 | Streamlit interface with a query-driven dashboard | Planned |
+| 2 | RAG engine: four tools, evidence IDs, command-line Q&A, race summaries | Done |
+| 3 | Streamlit interface with a query-driven dashboard | Next |
 | 4 | Evaluation and hardening | Planned |
 | 5 | Portfolio packaging | Planned |
 
