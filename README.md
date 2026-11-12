@@ -4,13 +4,13 @@ A chatbot that answers Formula 1 race questions from ingested data. It routes ea
 
 ## Status
 
-Under development. **Phase 0 (setup and spikes) is complete** and Phase 1 (ingestion) is in progress; the chatbot itself is not built yet.
+Under development, version 0.2. **Phases 0 and 1 are complete**: the 2026 races are loaded into SQLite and ChromaDB. The chatbot itself (Phase 2) is not built yet.
 
 | Phase | Goal | Status |
 |---|---|---|
 | 0 | Setup, check that Gemini, OpenF1 and Wikipedia work | Done |
-| 1 | Ingestion into SQLite and ChromaDB | In progress |
-| 2 | RAG engine: four tools, evidence IDs, command-line Q&A | Planned |
+| 1 | Ingestion into SQLite and ChromaDB | Done |
+| 2 | RAG engine: four tools, evidence IDs, command-line Q&A | Next |
 | 3 | Streamlit interface with a query-driven dashboard | Planned |
 | 4 | Evaluation and hardening | Planned |
 | 5 | Portfolio packaging | Planned |

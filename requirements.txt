@@ -1,4 +1,4 @@
-# Pinned dependencies, verified to install together on Python 3.13
+# Pinned dependencies, verified to install together on Python 3.11 and 3.13 (CI)
 # Race data comes from the OpenF1 REST API (see planning doc Appendix E.1)
 requests==2.34.2
 pandas==2.3.3

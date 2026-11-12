@@ -8,13 +8,15 @@ from pathlib import Path
 import pandas as pd
 import requests
 
+from f1rag import __version__
+
 BASE_URL = "https://api.openf1.org/v1"
 # The Bahrain Grand Prix was held in Kuala Lumpur in 2026 (OpenF1 country_name is "Bahrain")
 YEAR = 2026
 LOCATION = "Kuala Lumpur"
 DRIVER = "VER"
 CACHE_DIR = Path(__file__).resolve().parents[2] / "data" / "cache" / "openf1"
-HEADERS = {"User-Agent": "f1-race-rag-chatbot/0.1"}
+HEADERS = {"User-Agent": f"f1-race-rag-chatbot/{__version__}"}
 # Free limit is 3 requests/s and 30/min, so wait 2.5 s before every live call
 PAUSE_S = 2.5
 ENDPOINTS = ["drivers", "session_result", "laps", "stints", "pit", "weather", "race_control"]

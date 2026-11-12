@@ -7,11 +7,12 @@ from pathlib import Path
 
 import requests
 
+from f1rag import __version__
 from f1rag.ingest.errors import RateLimitError
 
 API_URL = "https://en.wikipedia.org/w/api.php"
 # Wikimedia asks every client for a descriptive User-Agent; no personal details are sent
-USER_AGENT = "f1-race-rag-chatbot/0.1"
+USER_AGENT = f"f1-race-rag-chatbot/{__version__}"
 # Wikimedia allows 10 requests per minute for clients that send no contact details,
 # so wait 6.5 s before every live call
 PAUSE_S = 6.5
