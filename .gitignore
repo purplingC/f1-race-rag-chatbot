@@ -15,6 +15,10 @@ __pycache__/
 data/cache/
 data/headshots/
 
+# Full local databases: the small sample database is added on purpose later
+data/*.db
+data/chroma/
+
 # Local planning docs: not committed for now
 docs/
 
