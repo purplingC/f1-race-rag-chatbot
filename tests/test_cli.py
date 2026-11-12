@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from f1rag import store
+from f1rag.engine.llm import LLMUnavailableError
 from f1rag.ingest import cli, structured
 from f1rag.ingest.openf1 import OpenF1Client, RateLimitError
 
@@ -367,12 +368,77 @@ def test_each_log_row_gets_the_time_of_its_own_load(conn, client, ingest):
     assert stamps == [(NOW + timedelta(minutes=m)).isoformat() for m in (1, 2, 3)]
 
 
-def test_only_accepts_data_or_text():
-    """Check that --only takes data or text and nothing else"""
+def test_only_accepts_data_text_or_summary():
+    """Check that --only takes data, text or summary and nothing else"""
     with pytest.raises(SystemExit):
         cli.parse_args(["--year", "2026", "--all", "--only", "pictures"])
     assert cli.parse_args(["--year", "2026", "--all", "--only", "text"]).only == "text"
+    assert cli.parse_args(["--year", "2026", "--all", "--only", "summary"]).only == "summary"
     assert cli.parse_args(["--year", "2026", "--all"]).only is None
+
+
+def test_default_run_does_not_generate_summaries(conn, client, ingest, text):
+    """Check summaries, which use Gemini quota, run only when asked for with --only summary"""
+    calls = []
+    args = cli.parse_args(["--year", "2026", "--gp", "Alphaville"])
+    cli.run(args, conn, client, NOW, text_loader=text,
+            summary_loader=lambda *a: calls.append(a) or 1)
+    assert calls == []
+    assert "summary" not in [row[1] for row in logged(conn)]
+
+
+def test_only_summary_generates_and_logs_each_race(conn, client, ingest):
+    """Check --only summary calls the summary loader per race and logs source summary"""
+    calls = []
+    args = cli.parse_args(["--year", "2026", "--all", "--only", "summary"])
+    summary = cli.run(args, conn, client, NOW,
+                      summary_loader=lambda season, entry, at: calls.append(entry["round"]) or 2)
+    assert calls == [1, 2, 3]
+    assert ingest.calls == []
+    assert [row[1:4] for row in logged(conn)] == [("summary", "ok", 2)] * 3
+    assert summary.exit_code == 0
+
+
+def test_gemini_rate_limit_stops_a_summary_run(conn, client, ingest):
+    """Check a Gemini rate limit stops the run so it can be resumed later"""
+    def loader(season, entry, at):
+        """Fail on the second race"""
+        if entry["round"] == 2:
+            raise LLMUnavailableError("Rate limit reached - try again in a minute")
+        return 1
+
+    args = cli.parse_args(["--year", "2026", "--all", "--only", "summary"])
+    summary = cli.run(args, conn, client, NOW, summary_loader=loader)
+    assert summary.stopped
+    assert [row[0] for row in logged(conn)] == [1, 2]
+
+
+def test_gemini_busy_stop_says_busy_not_rate_limit(conn, client, ingest):
+    """Check the stop message repeats Gemini's real problem instead of always saying rate limit"""
+    def loader(season, entry, at):
+        """Fail as busy on the first race"""
+        raise LLMUnavailableError("Gemini is busy right now - try again in a minute")
+
+    lines = []
+    args = cli.parse_args(["--year", "2026", "--all", "--only", "summary"])
+    summary = cli.run(args, conn, client, NOW, say=lines.append, summary_loader=loader)
+    assert "busy" in summary.stopped
+    assert "rate limit" not in summary.stopped
+    assert summary.stopped.startswith("stopped at round 1 ")
+
+
+def test_races_after_a_stop_are_counted_as_not_reached(conn, client, ingest):
+    """Check the totals line accounts for every chosen race, including those after a stop"""
+    def loader(season, entry, at):
+        """Fail on the second of three races"""
+        if entry["round"] == 2:
+            raise LLMUnavailableError("Gemini is still busy (tried 4 times)")
+        return 1
+
+    args = cli.parse_args(["--year", "2026", "--all", "--only", "summary"])
+    summary = cli.run(args, conn, client, NOW, summary_loader=loader)
+    assert [entry["round"] for entry in summary.not_reached] == [3]
+    assert summary.totals_line().endswith("1 failed, 1 not reached")
 
 
 def test_default_loads_race_data_then_text_for_each_race(conn, client, ingest, text):

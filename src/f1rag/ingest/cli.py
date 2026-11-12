@@ -1,23 +1,33 @@
-"""Command line entry point: load race data from OpenF1 and race reports from Wikipedia"""
+"""Command line entry point: load race data, Wikipedia race reports and generated race summaries"""
 
 import argparse
 import contextlib
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from f1rag import config, store, vectors
-from f1rag.ingest import structured, text
+from f1rag.engine.llm import GeminiLLM, LLMUnavailableError
+from f1rag.ingest import structured, summarize, text
 from f1rag.ingest.errors import RateLimitError
 from f1rag.ingest.openf1 import OpenF1Client
 from f1rag.ingest.wikipedia import WikipediaClient
 
 SOURCE = "openf1"
 TEXT_SOURCE = "wikipedia"
-# What --only selects, in loading order
-SOURCES_FOR = {None: (SOURCE, TEXT_SOURCE), "data": (SOURCE,), "text": (TEXT_SOURCE,)}
-SOURCE_NAMES = {SOURCE: "race data", TEXT_SOURCE: "Wikipedia text"}
-UNITS = {SOURCE: "rows", TEXT_SOURCE: "chunks"}
+SUMMARY_SOURCE = "summary"
+# What --only selects, in loading order; summaries use Gemini quota so they only run when asked
+SOURCES_FOR = {
+    None: (SOURCE, TEXT_SOURCE),
+    "data": (SOURCE,),
+    "text": (TEXT_SOURCE,),
+    "summary": (SUMMARY_SOURCE,),
+}
+SOURCE_NAMES = {SOURCE: "race data", TEXT_SOURCE: "Wikipedia text", SUMMARY_SOURCE: "race summary"}
+UNITS = {SOURCE: "rows", TEXT_SOURCE: "chunks", SUMMARY_SOURCE: "chunks"}
+# Seconds between summary calls, to stay under the free tier of 15 Gemini requests per minute
+SUMMARY_PACE_S = 4.5
 # OpenF1 fills some data (such as pit durations) a few hours after a session ends
 SETTLE_HOURS = 6
 # Meeting fields that a --gp query is matched against, the official name is left out
@@ -38,6 +48,8 @@ class Summary:
     not_finished: list = field(default_factory=list)
     cancelled: list = field(default_factory=list)
     failed: list = field(default_factory=list)
+    # Races left untouched because the run stopped before reaching them
+    not_reached: list = field(default_factory=list)
     error: str = None
     stopped: str = None
 
@@ -52,11 +64,14 @@ class Summary:
 
     def totals_line(self):
         """Return one line that counts what happened"""
-        return (
-            f"Done: {len(self.loaded)} loaded, {len(self.already)} already loaded, "
-            f"{len(self.not_finished)} not finished, {len(self.cancelled)} cancelled, "
-            f"{len(self.failed)} failed"
+        line = (
+            f"{'Stopped early' if self.stopped else 'Done'}: {len(self.loaded)} loaded, "
+            f"{len(self.already)} already loaded, {len(self.not_finished)} not finished, "
+            f"{len(self.cancelled)} cancelled, {len(self.failed)} failed"
         )
+        if self.not_reached:
+            line += f", {len(self.not_reached)} not reached"
+        return line
 
 
 def parse_args(argv=None):
@@ -80,8 +95,11 @@ def parse_args(argv=None):
     )
     parser.add_argument(
         "--only",
-        choices=["data", "text"],
-        help="load only race data (SQLite) or only Wikipedia text (ChromaDB), default both",
+        choices=["data", "text", "summary"],
+        help=(
+            "load only race data (SQLite) or only Wikipedia text (ChromaDB), default both; "
+            "summary writes race summaries with Gemini and only runs when chosen"
+        ),
     )
     parser.add_argument(
         "--db", default=str(config.DB_PATH), help="database file, default data/f1_stats.db"
@@ -190,20 +208,25 @@ def choose(args, races, cancelled, now, summary, say):
     return [entry]
 
 
-def load_source(source, args, conn, client, entry, clock, text_loader):
+def load_source(source, args, conn, client, entry, clock, loaders):
     """Load one source for one race and return how many rows or chunks were written"""
     if source == SOURCE:
         counts = structured.ingest_race(conn, client, args.year, entry["session"], entry["round"])
         return sum(counts.values())
-    if text_loader is None:
-        raise ValueError("No text loader was given for Wikipedia text")
-    return text_loader(args.year, entry, clock().isoformat())
+    loader = loaders.get(source)
+    if loader is None:
+        raise ValueError(f"No loader was given for {SOURCE_NAMES[source]}")
+    return loader(args.year, entry, clock().isoformat())
 
 
-def run(args, conn, client, now, say=lambda line: None, clock=None, text_loader=None):
+def run(
+    args, conn, client, now, say=lambda line: None, clock=None, text_loader=None,
+    summary_loader=None,
+):
     """Load the chosen races, log each source of each race, and return a summary"""
     # clock gives the time written to ingest_log, so each load records when it finished
     clock = clock or (lambda: now)
+    loaders = {TEXT_SOURCE: text_loader, SUMMARY_SOURCE: summary_loader}
     summary = Summary()
     races, cancelled = list_races(client, args.year)
     chosen = choose(args, races, cancelled, now, summary, say)
@@ -211,7 +234,7 @@ def run(args, conn, client, now, say=lambda line: None, clock=None, text_loader=
         say(f"Error: {summary.error}")
         return summary
 
-    for entry in chosen:
+    for index, entry in enumerate(chosen):
         label = f"round {entry['round']} {describe_race(entry)}"
         if not is_finished(entry["session"], now):
             summary.not_finished.append(entry)
@@ -228,16 +251,17 @@ def run(args, conn, client, now, say=lambda line: None, clock=None, text_loader=
 
             say(f"Loading {what}")
             try:
-                rows = load_source(source, args, conn, client, entry, clock, text_loader)
-            except RateLimitError as error:
+                rows = load_source(source, args, conn, client, entry, clock, loaders)
+            except (RateLimitError, LLMUnavailableError) as error:
                 message = f"{type(error).__name__}: {error}"
                 log_load(conn, args.year, entry["round"], "failed", None, message, clock(), source)
                 summary.failed.append((entry, source, message))
-                summary.stopped = (
-                    f"rate limit reached while loading {SOURCE_NAMES[source]}, "
-                    "run the same command again to resume"
-                )
-                say(f"Stopped: {summary.stopped}")
+                # Gemini's own message says whether it was a rate limit, busy or no answer
+                gemini = isinstance(error, LLMUnavailableError)
+                reason = str(error) if gemini else "rate limit reached"
+                summary.stopped = f"stopped at {what}: {reason}"
+                say(f"S{summary.stopped[1:]}")
+                say("Run the same command again to continue from this race.")
                 break
             except Exception as error:
                 message = f"{type(error).__name__}: {error}"
@@ -250,6 +274,10 @@ def run(args, conn, client, now, say=lambda line: None, clock=None, text_loader=
             summary.loaded.append((entry, source, rows))
             say(f"Loaded {what}: {rows} {UNITS[source]}")
         if summary.stopped:
+            # Every chosen race is still counted once: unfinished ones stay "not finished"
+            for rest in chosen[index + 1:]:
+                finished = is_finished(rest["session"], now)
+                (summary.not_reached if finished else summary.not_finished).append(rest)
             break
     return summary
 
@@ -268,7 +296,25 @@ def make_text_loader(args):
     return load
 
 
-def main(argv=None, client=None, now=None, text_loader=None):
+def make_summary_loader(args, conn, llm=None, sleep=time.sleep):
+    """Build the summary loader with Gemini and the vector store, pacing calls for the free tier"""
+    collection = vectors.open_collection(Path(args.chroma))
+    llm = llm or GeminiLLM(on_wait=print)
+    last_call = [None]
+
+    def load(season, entry, generated_at):
+        """Generate one race's summary and return the chunk count"""
+        if last_call[0] is not None:
+            sleep(max(0.0, SUMMARY_PACE_S - (time.monotonic() - last_call[0])))
+        last_call[0] = time.monotonic()
+        return summarize.ingest_race_summary(
+            conn, collection, llm, season, entry["round"], generated_at
+        )
+
+    return load
+
+
+def main(argv=None, client=None, now=None, text_loader=None, summary_loader=None):
     """Run the command line tool and return the exit code"""
     args = parse_args(argv)
     now_given = now is not None
@@ -281,7 +327,16 @@ def main(argv=None, client=None, now=None, text_loader=None):
         clock = None if now_given else (lambda: datetime.now(timezone.utc))
         if text_loader is None and TEXT_SOURCE in SOURCES_FOR[args.only]:
             text_loader = make_text_loader(args)
-        summary = run(args, conn, client, now, say=print, clock=clock, text_loader=text_loader)
+        if summary_loader is None and SUMMARY_SOURCE in SOURCES_FOR[args.only]:
+            try:
+                summary_loader = make_summary_loader(args, conn)
+            except LLMUnavailableError as error:
+                print(f"Error: {error}")
+                return 1
+        summary = run(
+            args, conn, client, now, say=print, clock=clock,
+            text_loader=text_loader, summary_loader=summary_loader,
+        )
     if not summary.error:
         print(summary.totals_line())
     return summary.exit_code
