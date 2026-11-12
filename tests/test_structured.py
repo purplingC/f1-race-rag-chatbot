@@ -6,7 +6,7 @@ import pytest
 from f1rag import store
 from f1rag.ingest import structured
 
-# Everything below is placeholder data for tests, not real F1 data.
+# Everything below is placeholder data for tests, not real F1 data
 RACE_SESSION = {
     "session_key": 100,
     "meeting_key": 10,
@@ -133,6 +133,13 @@ def make_data():
              "flag": None, "scope": None, "sector": None, "driver_number": 33,
              "message": "PLACEHOLDER CAR STOPPED"},
         ],
+        "position": [
+            {"driver_number": 11, "date": "2026-01-01T10:00:30+00:00", "position": 2},
+            {"driver_number": 11, "date": "2026-01-01T10:02:30+00:00", "position": 1},
+            {"driver_number": 22, "date": "2026-01-01T10:00:30+00:00", "position": 1},
+            {"driver_number": 22, "date": "2026-01-01T10:02:30+00:00", "position": 2},
+            {"driver_number": 33, "date": "2026-01-01T10:00:30+00:00", "position": 3},
+        ],
     }
 
 
@@ -182,9 +189,6 @@ def all_counts(connection):
 def codes_of(rows):
     """Build the driver number to code lookup used by the row builders"""
     return structured.driver_codes(rows)
-
-
-# ---- pure row builders --------------------------------------------------------------
 
 
 def test_number_rounds_orders_races_by_date():
@@ -314,9 +318,6 @@ def test_race_control_is_numbered_in_time_order(data):
     assert rows[0]["driver_code"] is None
 
 
-# ---- loading into SQLite ------------------------------------------------------------
-
-
 def test_ingest_race_fills_every_table_with_season_and_round(conn, data):
     """Check that one ingest fills all tables and returns the row counts"""
     counts = structured.ingest_race(conn, FakeClient(data), 2026, RACE_SESSION, 1)
@@ -390,3 +391,28 @@ def test_failed_ingest_rolls_back_and_keeps_old_rows(conn, data):
     with pytest.raises(sqlite3.IntegrityError):
         structured.ingest_race(conn, FakeClient(broken), 2026, RACE_SESSION, 1)
     assert all_counts(conn) == before
+
+
+def test_ingest_race_fills_derived_columns(conn, data):
+    """Check that tyre data, lap positions and stint averages are filled after a load"""
+    client = FakeClient(data)
+    structured.ingest_race(conn, client, 2026, RACE_SESSION, 1)
+    assert ("position", {"session_key": 100}) in client.calls
+
+    laps = {(r["driver_code"], r["lap_number"]): r for r in conn.execute("SELECT * FROM laps")}
+    first = laps[("AAA", 1)]
+    assert (first["compound"], first["stint"], first["tyre_age"], first["position"]) == (
+        "MEDIUM",
+        1,
+        1,
+        2,
+    )
+    assert laps[("AAA", 3)]["compound"] == "HARD"
+    # The trailing lap with no time is outside every stint and has no end time
+    assert laps[("AAA", 4)]["compound"] is None
+    assert laps[("AAA", 4)]["position"] is None
+    assert [laps[("BBB", n)]["position"] for n in (1, 2, 3)] == [1, 2, 2]
+
+    stints = conn.execute("SELECT driver_code, stint_no, avg_lap_time_s FROM stints")
+    averages = {(r["driver_code"], r["stint_no"]): r["avg_lap_time_s"] for r in stints}
+    assert averages == {("AAA", 1): None, ("AAA", 2): 98.0, ("BBB", 1): 100.25}

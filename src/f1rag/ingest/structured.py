@@ -2,7 +2,9 @@
 
 from datetime import datetime
 
-# Tables filled by ingest_race. Each row carries season and round.
+from f1rag.ingest import derive
+
+# Tables filled by ingest_race, each row carries season and round
 RACE_TABLES = (
     "events",
     "entries",
@@ -15,7 +17,16 @@ RACE_TABLES = (
 )
 
 # OpenF1 endpoints queried with the race session key
-RACE_ENDPOINTS = ("drivers", "session_result", "laps", "stints", "pit", "weather", "race_control")
+RACE_ENDPOINTS = (
+    "drivers",
+    "session_result",
+    "laps",
+    "stints",
+    "pit",
+    "weather",
+    "race_control",
+    "position",
+)
 
 
 def number_rounds(race_sessions):
@@ -117,7 +128,7 @@ def build_laps(season, round_no, laps, codes):
             "s2_s": row["duration_sector_2"],
             "s3_s": row["duration_sector_3"],
             "is_pit_out_lap": int(bool(row["is_pit_out_lap"])),
-            # Filled by the derived-columns step
+            # Filled by the derive step
             "compound": None,
             "tyre_age": None,
             "stint": None,
@@ -145,7 +156,7 @@ def build_stints(season, round_no, stints, codes):
                 "end_lap": end,
                 "n_laps": end - start + 1 if start is not None and end is not None else None,
                 "tyre_age_at_start": row["tyre_age_at_start"],
-                # Filled by the derived-columns step
+                # Filled by the derive step
                 "avg_lap_time_s": None,
             }
         )
@@ -253,15 +264,24 @@ def ingest_race(conn, client, season, race_session, round_no):
     """Fetch one race from OpenF1 and replace its rows in SQLite, returning the row counts"""
     data = fetch_race(client, race_session)
     codes = driver_codes(data["drivers"])
+    laps = build_laps(season, round_no, data["laps"], codes)
+    stints = build_stints(season, round_no, data["stints"], codes)
+    pit_stops = build_pit_stops(season, round_no, data["pit"], codes)
+
+    # Derived columns: tyre data and position on laps, average pace on stints
+    laps = derive.add_stint_columns(laps, stints)
+    laps = derive.add_positions(laps, derive.build_positions(data["position"], codes))
+    stints = derive.add_stint_averages(stints, laps, pit_stops)
+
     tables = {
         "events": [
             build_event(season, round_no, race_session, data["meeting"], data["qualifying_key"])
         ],
         "entries": build_entries(season, round_no, data["drivers"]),
         "results": build_results(season, round_no, data["session_result"], codes, data["grid"]),
-        "laps": build_laps(season, round_no, data["laps"], codes),
-        "stints": build_stints(season, round_no, data["stints"], codes),
-        "pit_stops": build_pit_stops(season, round_no, data["pit"], codes),
+        "laps": laps,
+        "stints": stints,
+        "pit_stops": pit_stops,
         "weather": build_weather(season, round_no, data["weather"], race_session["date_start"]),
         "race_control": build_race_control(season, round_no, data["race_control"], codes),
     }
