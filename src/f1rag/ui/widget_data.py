@@ -17,6 +17,12 @@ def rows(conn, sql, params=()):
     return [dict(zip(names, row)) for row in cursor]
 
 
+def in_order(found, wanted):
+    """Sort rows by the position of their driver in the wanted list, keeping lap order"""
+    rank = {code: index for index, code in enumerate(wanted)}
+    return sorted(found, key=lambda row: rank.get(row["code"], len(rank)))
+
+
 def placeholders(items):
     """Return ?, ?, ? for a list, for use in an IN clause"""
     return ", ".join("?" for _ in items)
@@ -31,6 +37,22 @@ def color(value):
 def codes(drivers):
     """Upper-case driver codes, keeping their order"""
     return [code.strip().upper() for code in drivers or []]
+
+
+def race_drivers(conn, season, round_no):
+    """Map each driver code of a race to name, team and team colour, for charts and tables"""
+    found = rows(
+        conn,
+        "SELECT driver_code AS code, full_name AS name, team, team_color FROM entries "
+        "WHERE season = ? AND round = ?",
+        (season, round_no),
+    )
+    return {
+        row["code"]: {
+            "name": row["name"], "team": row["team"], "team_color": color(row["team_color"]),
+        }
+        for row in found
+    }
 
 
 def driver_cards(conn, season, round_no, drivers):
@@ -102,7 +124,7 @@ def lap_times(conn, season, round_no, drivers, laps=None):
     pit_laps = {}
     for stop in stops:
         pit_laps.setdefault(stop["code"], []).append(stop["lap"])
-    return {"laps": found, "pit_laps": pit_laps}
+    return {"laps": in_order(found, wanted), "pit_laps": pit_laps}
 
 
 def finishing_order(conn, season, round_no):
@@ -167,13 +189,15 @@ def positions(conn, season, round_no, drivers=None):
         wanted = [code for code in wanted if code in classified]
     if not wanted:
         return []
-    return rows(
+    found = rows(
         conn,
         "SELECT driver_code AS code, lap_number AS lap, position FROM laps "
         f"WHERE season = ? AND round = ? AND driver_code IN ({placeholders(wanted)}) "
         "AND position IS NOT NULL ORDER BY driver_code, lap_number",
         (season, round_no, *wanted),
     )
+    # The first driver drawn gets the solid line, so the higher finisher comes first
+    return in_order(found, wanted)
 
 
 def race_summary(conn, season, round_no):

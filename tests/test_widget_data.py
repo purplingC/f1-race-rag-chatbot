@@ -208,3 +208,18 @@ def test_a_stop_with_no_stint_after_it_is_incomplete_even_if_counts_match(tmp_pa
     rows = wd.tyre_strategy(ro, 2026, 1)
     ro.close()
     assert {r["complete"] for r in rows} == {False}
+
+
+def test_race_drivers_maps_codes_to_name_team_and_colour(conn):
+    """Check the driver map used by charts gives name, team and a usable colour per code"""
+    drivers = wd.race_drivers(conn, S, R)
+    assert drivers["AAA"] == {"name": "Driver Alpha", "team": "Team A", "team_color": "#112233"}
+    assert drivers["CCC"]["team_color"] == wd.NEUTRAL_COLOR
+
+
+def test_chart_rows_follow_the_requested_or_finishing_order(conn):
+    """Check rows come in the order asked for, or finishing order, so the leader is drawn first"""
+    codes = [r["code"] for r in wd.lap_times(conn, S, R, ["BBB", "AAA"])["laps"]]
+    assert list(dict.fromkeys(codes)) == ["BBB", "AAA"]
+    default = [r["code"] for r in wd.positions(conn, S, R)]
+    assert list(dict.fromkeys(default)) == ["BBB", "AAA"]
