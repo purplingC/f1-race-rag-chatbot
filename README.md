@@ -50,7 +50,7 @@ Then edit `.env` and set `GEMINI_API_KEY` to a free key from [Google AI Studio](
 
 ## Load race data
 
-Race data comes from OpenF1 and goes into a local SQLite database, `data/f1_stats.db` (git-ignored). No key is needed.
+Race data comes from OpenF1 and goes into a local SQLite database, `data/f1_stats.db`. Race reports come from Wikipedia and go into a local ChromaDB vector store, `data/chroma/`. Both are git-ignored and need no key.
 
 ```bash
 python -m f1rag.ingest --year 2026 --gp "Kuala Lumpur"   # one race
@@ -59,7 +59,10 @@ python -m f1rag.ingest --year 2026 --all                # every finished race of
 
 - `--gp` matches the race name, location, country or circuit. Cancelled races are skipped with a note, and a query that matches several races lists them instead of guessing.
 - `--all` is resumable: a rerun skips rounds already loaded and retries failed ones. A first run takes roughly 15 to 20 minutes per season because OpenF1 is called politely (one request every 2.5 seconds); later runs read from the cache.
-- `--refresh` asks OpenF1 again and reloads everything; `--db` uses another database file.
+- `--only data` loads only the race data and `--only text` only the Wikipedia reports; the default loads both.
+- Wikipedia is called slowly on purpose (one request every 6.5 seconds, its limit for clients that send no contact details), so text adds about 15 seconds per race on a first run.
+- The first text load downloads ChromaDB's local embedding model once (about 83 MB, into `~/.cache/chroma`).
+- `--refresh` asks both sources again and reloads everything; `--db` and `--chroma` use another database file or vector store folder.
 
 ## Try the Phase 0 spikes
 
