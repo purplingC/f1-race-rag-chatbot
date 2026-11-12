@@ -153,3 +153,14 @@ def test_race_sessions_skips_cancelled_and_sorts_by_date(tmp_path):
     races = client.race_sessions(2026)
     assert [r["session_key"] for r in races] == [1, 3]
     assert http.calls[0]["params"] == {"year": 2026, "session_name": "Race"}
+
+
+def test_client_refresh_option_bypasses_the_cache_for_every_call(tmp_path):
+    """Check that a client built with refresh=True never reads saved answers"""
+    http = FakeHttp(FakeResponse(200, ROWS), FakeResponse(200, ROWS))
+    sleeps = []
+    first = OpenF1Client(tmp_path, http=http, sleep=sleeps.append)
+    first.get("laps", session_key=1)
+    second = OpenF1Client(tmp_path, http=http, sleep=sleeps.append, refresh=True)
+    second.get("laps", session_key=1)
+    assert len(http.calls) == 2

@@ -84,3 +84,8 @@ def test_entries_are_keyed_per_race_driver(conn):
     conn.execute(insert, (2026, 1, "Placeholder Team B"))
     teams = [r["team"] for r in conn.execute("SELECT team FROM entries ORDER BY season")]
     assert teams == ["Placeholder Team A", "Placeholder Team B"]
+
+
+def test_ingest_log_keeps_a_message_for_failed_loads(conn):
+    """Check that ingest_log can hold an error message next to the status"""
+    assert {"status", "rows", "ts", "message"} <= column_names(conn, "ingest_log")

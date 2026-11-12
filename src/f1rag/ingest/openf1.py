@@ -24,9 +24,10 @@ class RateLimitError(Exception):
 class OpenF1Client:
     """Fetches OpenF1 endpoints as lists of rows, caching each answer as a JSON file"""
 
-    def __init__(self, cache_dir, http=requests, sleep=time.sleep, pause_s=PAUSE_S):
-        """Create a client that caches answers under cache_dir"""
+    def __init__(self, cache_dir, http=requests, sleep=time.sleep, pause_s=PAUSE_S, refresh=False):
+        """Create a client that caches answers under cache_dir, or ignores the cache if refresh"""
         self.cache_dir = Path(cache_dir)
+        self.refresh = refresh
         self.http = http
         self.sleep = sleep
         self.pause_s = pause_s
@@ -40,7 +41,7 @@ class OpenF1Client:
     def get(self, endpoint, refresh=False, **params):
         """Return the rows for an endpoint, from disk if cached, else from OpenF1"""
         path = self._cache_path(endpoint, params)
-        if path.exists() and not refresh:
+        if path.exists() and not (refresh or self.refresh):
             return json.loads(path.read_text())
 
         rows = self._fetch(endpoint, params)

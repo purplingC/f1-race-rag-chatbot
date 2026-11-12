@@ -136,6 +136,7 @@ CREATE TABLE IF NOT EXISTS ingest_log (
     source TEXT,
     status TEXT,
     rows INTEGER,
+    message TEXT,
     ts TEXT
 );
 """
