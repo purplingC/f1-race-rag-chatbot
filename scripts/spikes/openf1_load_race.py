@@ -14,7 +14,7 @@ YEAR = 2026
 LOCATION = "Kuala Lumpur"
 DRIVER = "VER"
 CACHE_DIR = Path(__file__).resolve().parents[2] / "data" / "cache" / "openf1"
-HEADERS = {"User-Agent": "f1-race-rag-spike"}
+HEADERS = {"User-Agent": "f1-race-rag-chatbot/0.1"}
 # Free limit is 3 requests/s and 30/min, so wait 2.5 s before every live call
 PAUSE_S = 2.5
 ENDPOINTS = ["drivers", "session_result", "laps", "stints", "pit", "weather", "race_control"]

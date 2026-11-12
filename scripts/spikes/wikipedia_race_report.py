@@ -12,7 +12,7 @@ TITLE = "2026 Bahrain Grand Prix in Malaysia"
 FOCUS_NAME = "Verstappen"
 CACHE_DIR = Path(__file__).resolve().parents[2] / "data" / "cache" / "wikipedia"
 # Wikimedia asks every client to send a descriptive User-Agent
-HEADERS = {"User-Agent": "f1-race-rag-spike/0.1 (portfolio project; polite single requests)"}
+HEADERS = {"User-Agent": "f1-race-rag-chatbot/0.1"}
 EXCERPT_CHARS = 400
 
 

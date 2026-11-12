@@ -11,8 +11,9 @@ from f1rag.ingest.errors import RateLimitError
 
 API_URL = "https://en.wikipedia.org/w/api.php"
 # Wikimedia asks every client for a descriptive User-Agent; no personal details are sent
-USER_AGENT = "f1-race-rag-chatbot (portfolio project)"
-# Wikimedia allows 10 requests per minute for clients that send no contact details, so wait 6.5 s before every live call
+USER_AGENT = "f1-race-rag-chatbot/0.1"
+# Wikimedia allows 10 requests per minute for clients that send no contact details,
+# so wait 6.5 s before every live call
 PAUSE_S = 6.5
 MAX_ATTEMPTS = 3
 # Wait after a 429 with no Retry-After header, the policy asks for at least 5 s
