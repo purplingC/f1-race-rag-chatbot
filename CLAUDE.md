@@ -22,16 +22,17 @@ Narrative text: Wikipedia race articles (CC BY-SA 4.0) via the MediaWiki API. Ou
 8. If data is missing, say so and state coverage. Never guess.
 
 ## Guardrails
-- Never commit or print `.env`, the raw API cache or headshot images. Avatars default to initials; headshots only via `SHOW_HEADSHOTS=true`, at runtime.
+- Never commit or print `.env`, the raw API cache or headshot images. Avatars default to initials. Official headshots are downloaded once into the git-ignored `data/headshots/` (`python -m f1rag.ingest.headshots`), checked by the owner on its review sheet, and shown only when `SHOW_HEADSHOTS=true`; never in public demos, screenshots or recordings.
 - Send only public data to Gemini. No F1, FIA or team logos. No paid services.
 - HTML-escape database text in the UI.
-- Stack: Python 3.11+, requests (OpenF1), pandas, SQLite, chromadb (default embeddings), google-genai (model from `GEMINI_MODEL`), streamlit, plotly, pydantic, pytest, ruff. No LangChain. Ask before adding dependencies.
+- Stack: Python 3.11+, requests (OpenF1), pandas, SQLite, chromadb (default embeddings), google-genai (model from `GEMINI_MODEL`), streamlit, plotly, pydantic (Pillow comes with streamlit), pytest, ruff. No LangChain. Ask before adding dependencies.
 
 ## Commands
 ```
 pip install -r requirements.txt && pip install -e .   # once per virtual environment
 python -m f1rag.ingest --year 2025 --gp "<name>"   # or --all; --only data|text|summary
 python -m f1rag.ask "<question>"   # add --trace to see every tool call
+python -m f1rag.ingest.headshots   # local driver photos + review sheet; --skip CODE, --link CODE URL, --adjust CODE ZOOM DOWN
 streamlit run src/f1rag/ui/app.py
 pytest && ruff check .
 python -m f1rag.eval
@@ -53,4 +54,4 @@ python -m f1rag.eval
 - Database reference: when a SQLite table or column, or a ChromaDB metadata key or setting, changes, update Sections 5.3.1 and 5.4 of the technical documentation in the same task.
 - Consistency check: before each commit batch and again before the phase-end PR, review every tracked file (README.md, CLAUDE.md, `.env.example`, `requirements.txt`, `pyproject.toml`, scripts, tests) for stale or conflicting information (data source, scope, model, status, commands, Python version) and fix it or tell the owner. Before suggesting a push, also check that every pinned package's Requires-Python (on PyPI) fits the project's minimum, and that `ruff check .` and `pytest` pass on a clean copy of the committed files, so CI does not fail.
 - Build log: keep `docs/build-log.md` updated for the owner's personal use. It is git-ignored: never stage or commit it. After each task, append a dated entry: what was done, files changed, key decisions and why, and anything left open. Never write secrets or `.env` values in it. Also add a short bullet entry for the finished task to the technical documentation (`docs/F1_RAG_Chatbot_Planning_Design.docx`) Appendix F (what was actually done, not the plan).
-- Open decisions (Section 14) are undecided unless marked. Ask. Decided: Q1 = 2024, 2025 and completed 2026 rounds (widened 2026-11-12); Q2 = `gemini-3.5-flash-lite` (free quota 500 requests/day, 15/min; tool calling confirmed in Phase 0).
+- Open decisions (Section 14) are undecided unless marked. Ask. Decided: Q1 = 2024, 2025 and completed 2026 rounds (widened 2026-11-12); Q2 = `gemini-3.5-flash-lite` (free quota 500 requests/day, 15/min; tool calling confirmed in Phase 0); Q7 = initials by default, official photos kept locally in git-ignored `data/headshots/` and shown only with `SHOW_HEADSHOTS=true` (2026-11-13).

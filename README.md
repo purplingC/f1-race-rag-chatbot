@@ -65,6 +65,19 @@ python -m f1rag.ingest --year 2026 --all                # every finished race of
 - The first text load downloads ChromaDB's local embedding model once (about 83 MB, into `~/.cache/chroma`).
 - `--refresh` asks both sources again and reloads everything; `--db` and `--chroma` use another database file or vector store folder.
 
+## Driver photos (optional, local only)
+
+The dashboard shows each driver as a round avatar with a team-colour ring, using initials by default. To use the official photos on your own machine:
+
+```bash
+python -m f1rag.ingest.headshots            # download the photos once and make data/headshots/review_sheet.png
+python -m f1rag.ingest.headshots --skip XXX # reject a wrong photo: that driver shows initials
+python -m f1rag.ingest.headshots --link XXX https://...  # use a photo link from the driver's formula1.com page
+python -m f1rag.ingest.headshots --adjust XXX 1.1 0.03   # zoom in 10% and move down a little, for a head that looks small
+```
+
+Each photo is cropped so the head is centred with room above the hair. Then set `SHOW_HEADSHOTS=true` in `.env`. The photos are copyrighted by Formula 1: `data/headshots/` is git-ignored, and public demos, screenshots and recordings use initials.
+
 ## Ask questions
 
 Needs `GEMINI_API_KEY` in `.env` and at least one loaded race.
