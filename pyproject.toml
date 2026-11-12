@@ -1,4 +1,4 @@
-# Tool settings only. This project is not packaged; code lives in src/f1rag.
+# Tool settings only, this project is not packaged and code lives in src/f1rag
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

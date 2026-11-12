@@ -1,1 +1,1 @@
-"""F1 Race Summarizer & RAG Chatbot."""
+"""F1 Race Summarizer & RAG Chatbot"""

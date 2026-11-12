@@ -2,8 +2,8 @@
 
 import sqlite3
 
-# Every table carries season and round. All times are seconds (REAL).
-# Columns are filled from OpenF1; see the field mapping in planning doc Section 5.3.
+# Every table carries season and round, all times are seconds (REAL)
+# Columns are filled from OpenF1, see the field mapping in planning doc Section 5.3
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS events (
     season INTEGER NOT NULL,
@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS stints (
     PRIMARY KEY (season, round, driver_code, stint_no)
 );
 
--- Pit-lane time only (entry to exit). Stationary time is never stored.
+-- Pit-lane time only (entry to exit), stationary time is never stored
 CREATE TABLE IF NOT EXISTS pit_stops (
     season INTEGER NOT NULL,
     round INTEGER NOT NULL,
