@@ -65,3 +65,10 @@ def test_prompt_lists_the_loaded_races_so_find_race_can_be_skipped():
     assert "use its season and round directly" in text
     assert "facts you state still come from tool results" in text
     assert "Loaded races:\n- (none)" in prompts.system_prompt()
+
+
+def test_prompt_needs_a_tool_call_and_sends_careers_to_the_reports():
+    """Check the model must look something up first, and takes debuts and records from reports"""
+    text = prompts.system_prompt()
+    assert "at least one tool" in text
+    assert "debut" in text and "only holds the 2024, 2025 and 2026 seasons" in text

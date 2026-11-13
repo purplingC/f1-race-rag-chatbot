@@ -97,6 +97,7 @@ def test_run_scores_each_question_prints_metrics_and_saves_a_report(tmp_path, fa
     assert "| Numeric accuracy | 2/2 (100%) | ≥ 90% | yes |" in report
     assert "Expected values: AAA" in report
     assert "- E1 SQL result (1 row): `SELECT driver_code FROM results" in report
+    assert "Gemini calls: 0.0 s choosing tools, 0.0 s choosing tools, 0.0 s writing" in report
 
 
 def test_only_and_category_pick_questions(tmp_path, fake_embedding):

@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from f1rag import config, golden, vectors
+from f1rag.ask import PURPOSES
 from f1rag.engine import orchestrator, sql_guard
 from f1rag.engine.llm import GeminiLLM, LLMUnavailableError
 
@@ -104,6 +105,8 @@ def report_md(scores, rows, model, started):
         lines += [s.bundle.error or s.bundle.answer_md, ""]
         tools = ", ".join(step["tool"] for step in s.bundle.trace) or "none"
         lines.append(f"Tools: {tools}")
+        if s.bundle.model_calls:
+            lines.append("Gemini calls: " + ", ".join(call_text(c) for c in s.bundle.model_calls))
         if s.unsupported:
             lines.append(f"Numbers not found in tool output: {', '.join(s.unsupported)}")
         for item in s.bundle.evidence:
@@ -111,6 +114,14 @@ def report_md(scores, rows, model, started):
             detail = f": `{item.result.get('query', '')}`" if item.tool == "run_sql" else ""
             lines.append(f"- {item.id} {item.summary}{mark}{detail}")
     return "\n".join(lines) + "\n"
+
+
+def call_text(call):
+    """Describe one Gemini call with its time, purpose and retries, as in 2.4 s choosing tools"""
+    text = f"{call['ms'] / 1000:.1f} s {PURPOSES.get(call['purpose'], call['purpose'])}"
+    if call.get("retries"):
+        text += f" ({call['retries']} retr{'y' if call['retries'] == 1 else 'ies'})"
+    return text + (" (failed)" if call.get("failed") else "")
 
 
 def say_wait(notice):
