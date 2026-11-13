@@ -39,6 +39,25 @@ def codes(drivers):
     return [code.strip().upper() for code in drivers or []]
 
 
+def race_header(conn, season, round_no):
+    """Return the race name, circuit, date, laps and number of starters for the page banner"""
+    event = rows(
+        conn,
+        "SELECT event_name, circuit, country, race_date FROM events "
+        "WHERE season = ? AND round = ?",
+        (season, round_no),
+    )
+    header = event[0] if event else {
+        "event_name": None, "circuit": None, "country": None, "race_date": None,
+    }
+    counts = conn.execute(
+        "SELECT MAX(laps_completed), COUNT(*) FROM results WHERE season = ? AND round = ?",
+        (season, round_no),
+    ).fetchone()
+    return {**header, "season": season, "round": round_no, "laps": counts[0],
+            "drivers": counts[1]}
+
+
 def race_drivers(conn, season, round_no):
     """Map each driver code of a race to name, team and team colour, for charts and tables"""
     found = rows(
@@ -77,6 +96,7 @@ def driver_cards(conn, season, round_no, drivers):
         if code not in by_code:
             continue
         card = by_code[code]
+        card["season"] = season
         card["team_color"] = color(card["team_color"])
         both = card["grid"] is not None and card["finish"] is not None
         card["gained"] = card["grid"] - card["finish"] if both else None
@@ -84,19 +104,50 @@ def driver_cards(conn, season, round_no, drivers):
     return cards
 
 
+def duration_text(seconds, gap=False):
+    """Format seconds as a race time (1:35:23.504) or a gap (+14.602s, +1:16.496)"""
+    hours, rest = divmod(round(seconds, 3), 3600)
+    minutes, secs = divmod(rest, 60)
+    if gap:
+        return f"+{secs:.3f}s" if not minutes and not hours else f"+{int(minutes)}:{secs:06.3f}"
+    if hours:
+        return f"{int(hours)}:{int(minutes):02d}:{secs:06.3f}"
+    return f"{int(minutes)}:{secs:06.3f}"
+
+
+def result_time(row, winner):
+    """Return a driver's result like the official timing: winner time, gap, laps behind or status"""
+    if row.get("status") != "Finished":
+        return row.get("status") or "–"
+    own, best = row.get("race_time_s"), winner.get("race_time_s")
+    if own is not None and row.get("position") == 1:
+        return duration_text(own)
+    if own is not None and best is not None:
+        return duration_text(own - best, gap=True)
+    # OpenF1 leaves the race time empty exactly for lapped drivers (all 129 cases in 2026)
+    behind = (winner.get("laps") or 0) - (row.get("laps") or 0)
+    if behind > 0:
+        return f"+{behind} lap{'' if behind == 1 else 's'}"
+    return "–"
+
+
 def classification(conn, season, round_no):
-    """Return the final classification, unclassified drivers last"""
+    """Return the final classification with car numbers and times, unclassified drivers last"""
     found = rows(
         conn,
         "SELECT r.finish_pos AS position, r.driver_code AS code, e.full_name AS name, e.team, "
-        "e.team_color, r.grid_pos AS grid, r.status, r.points, r.laps_completed AS laps "
+        "e.team_color, e.car_number AS number, r.grid_pos AS grid, r.status, r.points, "
+        "r.laps_completed AS laps, r.race_time_s "
         "FROM results r LEFT JOIN entries e ON e.season = r.season AND e.round = r.round "
         "AND e.driver_code = r.driver_code WHERE r.season = ? AND r.round = ? "
         "ORDER BY r.finish_pos IS NULL, r.finish_pos, r.laps_completed DESC",
         (season, round_no),
     )
+    winner = next((row for row in found if row["position"] == 1), {})
     for row in found:
+        row["season"] = season
         row["team_color"] = color(row["team_color"])
+        row["time"] = result_time(row, winner)
     return found
 
 
@@ -226,7 +277,8 @@ def race_summary(conn, season, round_no):
     card["fastest_lap"] = fastest[0] if fastest else None
     counts = rows(
         conn,
-        "SELECT SUM(message = 'SAFETY CAR DEPLOYED') AS sc, SUM(message = 'VSC DEPLOYED') AS vsc, "
+        "SELECT SUM(message = 'SAFETY CAR DEPLOYED') AS sc, "
+        "SUM(message IN ('VSC DEPLOYED', 'VIRTUAL SAFETY CAR DEPLOYED')) AS vsc, "
         "SUM(message LIKE 'RED FLAG%') AS red, "
         "SUM(message = 'STARTING PROCEDURE SUSPENDED') AS suspended "
         "FROM race_control WHERE season = ? AND round = ?",
@@ -238,6 +290,40 @@ def race_summary(conn, season, round_no):
     # A start stopped before the race (for example for rain) is logged without RED FLAG
     card["start_suspended"] = bool(counts["suspended"])
     return card
+
+
+def track_periods(conn, season, round_no):
+    """List the safety car and VSC laps and the red flags of a race, in lap order"""
+    # 2026 says VSC, 2024 and 2025 spell out VIRTUAL SAFETY CAR
+    starts = {"SAFETY CAR DEPLOYED": "SC", "VSC DEPLOYED": "VSC",
+              "VIRTUAL SAFETY CAR DEPLOYED": "VSC"}
+    ends = {"SAFETY CAR IN THIS LAP": "SC", "VSC ENDING": "VSC",
+            "VIRTUAL SAFETY CAR ENDING": "VSC"}
+    events = rows(
+        conn,
+        "SELECT lap_number AS lap, message FROM race_control WHERE season = ? AND round = ? "
+        "AND lap_number IS NOT NULL ORDER BY event_no",
+        (season, round_no),
+    )
+    last = rows(conn, "SELECT MAX(lap_number) AS lap FROM laps WHERE season = ? AND round = ?",
+                (season, round_no))[0]["lap"]
+    periods, open_period = [], None
+    for event in events:
+        message, lap = event["message"] or "", event["lap"]
+        if message in starts and open_period is None:
+            open_period = {"kind": starts[message], "start": lap, "end": lap}
+        elif open_period and ends.get(message) == open_period["kind"]:
+            periods.append({**open_period, "end": lap})
+            open_period = None
+        elif message.startswith("RED FLAG"):
+            # A red flag stops the race, so a safety car running then ends with it
+            if open_period:
+                periods.append({**open_period, "end": lap})
+                open_period = None
+            periods.append({"kind": "RED", "start": lap, "end": lap})
+    if open_period:
+        periods.append({**open_period, "end": max(last or 0, open_period["start"])})
+    return periods
 
 
 def fetch(conn, season, round_no, widget):

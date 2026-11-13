@@ -16,6 +16,7 @@ build/
 # Raw API cache (OpenF1, Wikipedia) and driver headshots: never committed
 data/cache/
 data/headshots/
+data/team_logos/
 
 # Full local databases: the small sample database is added on purpose later
 data/*.db

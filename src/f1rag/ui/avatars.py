@@ -12,6 +12,27 @@ from f1rag.ui import theme
 
 CODE = re.compile(r"^[A-Z]{3}$")
 HEX = re.compile(r"^#[0-9A-Fa-f]{6}$")
+SEASON = re.compile(r"^\d{4}$")
+
+
+def team_logos_enabled():
+    """Tell whether SHOW_TEAM_LOGOS=true is set, so official team logos may be shown"""
+    return os.getenv("SHOW_TEAM_LOGOS", "false").strip().lower() == "true"
+
+
+def team_logo_html(team, season, folder=None, show=None, height=14):
+    """Return a small team logo for the start of a team name, or nothing when off or missing"""
+    show = team_logos_enabled() if show is None else show
+    if not show or not team or not SEASON.match(str(season)):
+        return ""
+    # Same file names as python -m f1rag.ingest.team_logos: season folder, name without spaces
+    name = re.sub(r"[^a-z0-9]", "", team.lower())
+    path = Path(folder or config.TEAM_LOGO_DIR) / str(season) / f"{name}.png"
+    if not path.exists():
+        return ""
+    data = photo_data(str(path), path.stat().st_mtime)
+    return (f'<img src="data:image/png;base64,{data}" alt="{html.escape(team)} logo" '
+            f'style="height:{height}px;width:auto;vertical-align:-2px;margin-right:5px">')
 
 
 def headshots_enabled():

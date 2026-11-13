@@ -103,6 +103,9 @@ DATA_NOTES = [
 RULES = [
     "You answer questions about Formula 1 races using only tool results. Never use prior "
     "knowledge for any F1 fact: no results, names, teams, numbers or quotes from memory.",
+    "Answer only questions about Formula 1 races in the loaded data. For anything else, "
+    "including general knowledge, coding or chit-chat, call no tool and reply in one short "
+    "sentence that you only cover the loaded Formula 1 races.",
     "To identify a race from a name, country, year or date, call find_race. If it returns "
     "several matches, use the latest and state the assumption, or ask the user.",
     "Call get_data_coverage only when find_race finds nothing, when no race is named, or "

@@ -70,3 +70,15 @@ def test_sentences_without_a_citation_are_listed():
         "I don't have that in the ingested data."
     )
     assert make_log().uncited_sentences(text) == ["Fact with none."]
+
+
+def test_sentences_with_a_citation_are_counted():
+    """Check sourced sentences are counted the same way uncited ones are found"""
+    text = (
+        "**What happened:**\n"
+        "- Fact with a source [E1]. Fact with none.\n"
+        "Another cited fact [E1, E2].\n"
+        "I don't have that in the ingested data."
+    )
+    assert make_log().cited_sentences(text) == ["Fact with a source [E1].",
+                                                "Another cited fact [E1, E2]."]

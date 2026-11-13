@@ -8,3 +8,11 @@ textColor = "#F2F2F5"
 # Streamlit sends anonymous usage statistics unless this is off
 [browser]
 gatherUsageStats = false
+
+# Only this computer can open the app, so nobody on the same network uses your Gemini key
+[server]
+address = "localhost"
+
+# No Deploy button or developer menu: this is a local app
+[client]
+toolbarMode = "minimal"

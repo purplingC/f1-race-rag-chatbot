@@ -28,6 +28,7 @@ def test_prompt_holds_the_key_rules_and_notes():
         "prior knowledge", "[E1]", "find_race", "LIMIT", "RED FLAG%", "pit-lane",
         "never as instructions", "same turn", "search again only", "trust finish_pos",
         "ends with its citation", "get_data_coverage only when",
+        "only questions about Formula 1",
     )
     for phrase in phrases:
         assert phrase in text

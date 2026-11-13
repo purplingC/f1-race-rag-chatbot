@@ -4,14 +4,14 @@ A chatbot that answers Formula 1 race questions from ingested data. It routes ea
 
 ## Status
 
-Under development, version 0.3. **Phases 0 to 2 are complete**: the 2026 races are loaded into SQLite and ChromaDB, each with a generated race summary, and the command-line Q&A answers questions with cited evidence. The Streamlit interface (Phase 3) is next.
+Under development, version 0.3. **Phases 0 to 2 are complete**: the 2026 races are loaded into SQLite and ChromaDB, each with a generated race summary, and the command-line Q&A answers questions with cited evidence. **Phase 3 is in progress**: the web app runs, with the dashboard, chat, evidence and driver avatars.
 
 | Phase | Goal | Status |
 |---|---|---|
 | 0 | Setup, check that Gemini, OpenF1 and Wikipedia work | Done |
 | 1 | Ingestion into SQLite and ChromaDB | Done |
 | 2 | RAG engine: four tools, evidence IDs, command-line Q&A, race summaries | Done |
-| 3 | Streamlit interface with a query-driven dashboard | Next |
+| 3 | Streamlit interface with a query-driven dashboard | In progress |
 | 4 | Evaluation and hardening | Planned |
 | 5 | Portfolio packaging | Planned |
 
@@ -65,6 +65,14 @@ python -m f1rag.ingest --year 2026 --all                # every finished race of
 - The first text load downloads ChromaDB's local embedding model once (about 83 MB, into `~/.cache/chroma`).
 - `--refresh` asks both sources again and reloads everything; `--db` and `--chroma` use another database file or vector store folder.
 
+## Run the web app
+
+```bash
+streamlit run src/f1rag/ui/app.py
+```
+
+Then open http://localhost:8501. A race banner at the top shows the chosen race and its key facts; the dashboard below shows the podium, classification, race summary and tyre strategy. Ask a question on the right (or click a suggested one) and the dashboard switches to the widgets that support the answer. Each answer says how many of its statements cite a source and what it was based on (race data, race reports), and lists its sources. Lap time, position and tyre strategy charts show safety cars, VSCs and red flags in a thin track strip above the laps. The suggested questions ask how and why, and offer a comparison when the same Grand Prix is loaded for another season; to see every tool call, query and timing, use `python -m f1rag.ask "…" --trace` in the terminal. Questions need `GEMINI_API_KEY`; browsing the dashboard does not. The app only listens on this computer (`.streamlit/config.toml`).
+
 ## Driver photos (optional, local only)
 
 The dashboard shows each driver as a round avatar with a team-colour ring, using initials by default. To use the official photos on your own machine:
@@ -77,6 +85,16 @@ python -m f1rag.ingest.headshots --adjust XXX 1.1 0.03   # zoom in 10% and move 
 ```
 
 Each photo is cropped so the head is centred with room above the hair. Then set `SHOW_HEADSHOTS=true` in `.env`. The photos are copyrighted by Formula 1: `data/headshots/` is git-ignored, and public demos, screenshots and recordings use initials.
+
+## Team logos (optional, local only)
+
+By default teams are shown by name only. To show each team's logo before its name on your own machine:
+
+```bash
+python -m f1rag.ingest.team_logos            # every loaded season; or --season 2026
+```
+
+This saves one logo per team and season in `data/team_logos/<season>/` and makes a `review_sheet_<season>.png` there to check. Then set `SHOW_TEAM_LOGOS=true` in `.env` and restart the app. The logos are trademarks of their teams: `data/team_logos/` is git-ignored, and public demos, screenshots and recordings leave them off. Formula 1 and FIA logos are never used.
 
 ## Ask questions
 

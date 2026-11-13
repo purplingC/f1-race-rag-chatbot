@@ -122,7 +122,8 @@ def test_tool_results_sent_to_the_model_carry_evidence_ids(conn, collection):
 
 def test_final_call_uses_json_mode_without_tools(conn, collection):
     """Check the last call asks for JSON and offers no tools"""
-    llm = FakeLLM([LLMReply(text="No tools needed"), final("I don't have that.")])
+    llm = FakeLLM([calls(("get_data_coverage", {})), LLMReply(text="Draft"),
+                   final("I don't have that [E1].")])
     orchestrator.answer("Hello", llm, conn, collection)
     assert llm.sent[0]["tools"] and llm.sent[0]["json"] is None
     assert llm.sent[-1]["tools"] is None and llm.sent[-1]["json"]
@@ -186,9 +187,10 @@ def test_loop_stops_after_max_steps_and_still_answers(conn, collection):
 
 def test_invalid_final_json_falls_back_to_the_draft(conn, collection):
     """Check a final reply that is not JSON falls back to the last plain answer"""
-    llm = FakeLLM([LLMReply(text="Plain draft"), LLMReply(text="not json")])
+    llm = FakeLLM([calls(("get_data_coverage", {})), LLMReply(text="Plain draft [E1]"),
+                   LLMReply(text="not json")])
     result = orchestrator.answer("Hi", llm, conn, collection)
-    assert result.answer_md == "Plain draft"
+    assert result.answer_md == "Plain draft [E1]"
 
 
 def test_rate_limit_gives_a_clear_error_bundle(conn, collection):
@@ -275,3 +277,26 @@ def test_without_a_draft_a_failed_final_step_is_still_an_error(conn, collection)
     result = orchestrator.answer("Who won?", llm, conn, collection)
     assert result.error == BUSY
     assert result.model_calls[-1]["purpose"] == "final"
+
+
+def test_a_question_answered_without_any_tool_gets_the_off_topic_reply(conn, collection):
+    """Check an answer with no evidence is replaced by the fixed F1-only reply"""
+    llm = FakeLLM([LLMReply(text="Paris is the capital of France."),
+                   final("Paris is the capital of France.")])
+    result = orchestrator.answer("What is the capital of France?", llm, conn, collection)
+    assert result.answer_md == orchestrator.OFF_TOPIC
+    assert result.dashboard is None and result.error is None and result.cited == []
+
+
+def test_progress_steps_are_reported_in_plain_words(conn, collection):
+    """Check each tool call and the final step are announced in plain words, in order"""
+    steps = []
+    llm = FakeLLM([
+        calls(("find_race", {"name": "Placeholder"})),
+        calls(("run_sql", {"query": WINNER_SQL}), ("search_docs", {"query": "race"})),
+        LLMReply(text="Draft"), final("AAA won [E2]."),
+    ])
+    orchestrator.answer("Who won?", llm, conn, collection, on_progress=steps.append)
+    assert steps == ["Finding the race", "Looking up the race data", "Reading the race reports",
+                     "Writing the answer"]
+    assert not any("_" in step for step in steps)

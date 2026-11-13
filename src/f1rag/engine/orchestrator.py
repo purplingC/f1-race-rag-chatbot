@@ -15,6 +15,20 @@ DRAFT_NOTE = (
     "Gemini was busy for the final step, so this is its draft answer "
     "(citations checked, dashboard chosen by rules)"
 )
+# Shown when the model answered without looking anything up: facts must come from tools,
+# so such an answer is replaced, whatever the model wrote (off-topic questions, greetings)
+OFF_TOPIC = (
+    "I can only answer questions about the Formula 1 races loaded here. Try asking who won a "
+    "race, how a driver's race went, or how the tyre strategies compared."
+)
+# What the user sees while each tool runs
+STEP_WORDS = {
+    "find_race": "Finding the race",
+    "run_sql": "Looking up the race data",
+    "search_docs": "Reading the race reports",
+    "get_data_coverage": "Checking which races are loaded",
+}
+FINAL_STEP = "Writing the answer"
 # Arguments each tool accepts, read from the descriptions given to the model
 ALLOWED_ARGS = {t["name"]: set(t["parameters"]["properties"]) for t in tools.DECLARATIONS}
 
@@ -99,9 +113,18 @@ class Session:
         return {"evidence_id": evidence_id, **result}
 
 
-def answer(question, llm, conn, collection, history=None, max_steps=MAX_STEPS, default_race=None):
+def answer(question, llm, conn, collection, history=None, max_steps=MAX_STEPS, default_race=None,
+           on_progress=None):
     """Answer one question with tools and return the answer, evidence, trace and dashboard"""
     started = time.monotonic()
+    said = []
+
+    def progress(words):
+        """Tell the caller what is happening, once per change, in plain words"""
+        if on_progress and (not said or said[-1] != words):
+            said.append(words)
+            on_progress(words)
+
     session = Session(llm, conn, collection)
     contents = []
     for role, text in history or []:
@@ -116,10 +139,17 @@ def answer(question, llm, conn, collection, history=None, max_steps=MAX_STEPS, d
             draft = reply.text or draft
             if not reply.calls:
                 break
-            results = [(call.name, session.handle(step, call)) for call in reply.calls]
+            results = []
+            for call in reply.calls:
+                progress(STEP_WORDS.get(call.name, "Looking things up"))
+                results.append((call.name, session.handle(step, call)))
             contents.append(llm.tool_results_turn(results))
     except LLMUnavailableError as error:
         return bundle(question, session, llm, str(error), started, error=str(error))
+    if not session.evidence.items:
+        # Nothing was looked up, so nothing in an answer could be grounded
+        return bundle(question, session, llm, OFF_TOPIC, started)
+    progress(FINAL_STEP)
     contents.append(llm.user_turn(prompts.FINAL_INSTRUCTION))
     try:
         final = session.generate(contents, "final", json_schema=prompts.ANSWER_SCHEMA)

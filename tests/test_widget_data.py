@@ -223,3 +223,87 @@ def test_chart_rows_follow_the_requested_or_finishing_order(conn):
     assert list(dict.fromkeys(codes)) == ["BBB", "AAA"]
     default = [r["code"] for r in wd.positions(conn, S, R)]
     assert list(dict.fromkeys(default)) == ["BBB", "AAA"]
+
+
+def test_race_header_gives_the_banner_facts(conn):
+    """Check the banner gets the race name, laps and number of starters from the database"""
+    header = wd.race_header(conn, S, R)
+    assert header["event_name"] == "Placeholder GP"
+    assert header["laps"] == 4 and header["drivers"] == 3
+    assert wd.race_header(conn, S, 9)["event_name"] is None
+
+
+def test_classification_rows_carry_car_number_and_result_time(conn, tmp_path):
+    """Check every row has its car number and a time like the official results"""
+    rows = {r["code"]: r for r in wd.classification(conn, S, R)}
+    assert (rows["AAA"]["number"], rows["BBB"]["number"], rows["CCC"]["number"]) == (1, 2, 3)
+    assert rows["CCC"]["time"] == "DNF"
+
+
+def test_result_times_show_winner_time_gaps_and_laps_behind():
+    """Check the winner's total time, gaps to the winner, laps behind and retirements"""
+    winner = {"race_time_s": 5723.504, "laps": 71}
+    assert wd.result_time({"race_time_s": 5723.504, "laps": 71, "status": "Finished",
+                           "position": 1}, winner) == "1:35:23.504"
+    assert wd.result_time({"race_time_s": 5738.106, "laps": 71, "status": "Finished",
+                           "position": 2}, winner) == "+14.602s"
+    assert wd.result_time({"race_time_s": 5800.0, "laps": 71, "status": "Finished",
+                           "position": 9}, winner) == "+1:16.496"
+    assert wd.result_time({"race_time_s": None, "laps": 70, "status": "Finished",
+                           "position": 10}, winner) == "+1 lap"
+    assert wd.result_time({"race_time_s": None, "laps": 69, "status": "Finished",
+                           "position": 18}, winner) == "+2 laps"
+    assert wd.result_time({"race_time_s": None, "laps": 30, "status": "DNF",
+                           "position": None}, winner) == "DNF"
+    assert wd.result_time({"race_time_s": None, "laps": 71, "status": "Finished",
+                           "position": 3}, winner) == "–"
+
+
+def test_rows_and_cards_know_their_season_for_the_team_logo(conn):
+    """Check classification rows and driver cards carry the season of the race"""
+    assert {r["season"] for r in wd.classification(conn, S, R)} == {S}
+    assert {c["season"] for c in wd.driver_cards(conn, S, R, ["AAA"])} == {S}
+
+
+def race_control_db(tmp_path, messages, last_lap):
+    """Build one race with these race-control messages and laps up to last_lap"""
+    path = tmp_path / "rc.db"
+    c = store.connect(path)
+    store.create_schema(c)
+    with c:
+        c.executemany(
+            "INSERT INTO race_control (season, round, event_no, lap_number, category, message) "
+            "VALUES (2026, 1, ?, ?, 'SafetyCar', ?)",
+            [(n, lap, text) for n, (lap, text) in enumerate(messages, start=1)],
+        )
+        c.execute("INSERT INTO laps (season, round, driver_code, lap_number) "
+                  "VALUES (2026, 1, 'AAA', ?)", (last_lap,))
+    c.close()
+    return sql_guard.connect_read_only(path)
+
+
+def test_safety_cars_vscs_and_red_flags_become_lap_periods(tmp_path):
+    """Check both VSC wordings, a safety car ended by a red flag and one left open"""
+    ro = race_control_db(tmp_path, [
+        (1, "VIRTUAL SAFETY CAR DEPLOYED"), (2, "VIRTUAL SAFETY CAR ENDING"),
+        (5, "SAFETY CAR DEPLOYED"), (6, "LAPPED CARS MAY NOW OVERTAKE THE SAFETY CAR: 1"),
+        (7, "SAFETY CAR IN THIS LAP"),
+        (9, "VSC DEPLOYED"), (9, "VSC ENDING"),
+        (12, "SAFETY CAR DEPLOYED"), (14, "RED FLAG - RACE SUSPENDED"),
+        (16, "SAFETY CAR DEPLOYED"),
+    ], last_lap=18)
+    periods = wd.track_periods(ro, 2026, 1)
+    ro.close()
+    assert periods == [
+        {"kind": "VSC", "start": 1, "end": 2}, {"kind": "SC", "start": 5, "end": 7},
+        {"kind": "VSC", "start": 9, "end": 9}, {"kind": "SC", "start": 12, "end": 14},
+        {"kind": "RED", "start": 14, "end": 14}, {"kind": "SC", "start": 16, "end": 18},
+    ]
+
+
+def test_race_summary_counts_both_vsc_wordings(tmp_path):
+    """Check VIRTUAL SAFETY CAR DEPLOYED (2024-2025) counts like VSC DEPLOYED (2026)"""
+    ro = race_control_db(tmp_path, [(1, "VIRTUAL SAFETY CAR DEPLOYED"), (3, "VSC DEPLOYED")], 5)
+    card = wd.race_summary(ro, 2026, 1)
+    ro.close()
+    assert card["virtual_safety_cars"] == 2
