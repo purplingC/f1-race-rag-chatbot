@@ -26,6 +26,11 @@ OTHER_SERIES = ("motorcycle",)
 REQUIRED_PHRASE = "Formula One"
 
 
+def plain(title):
+    """Lower-case a title and treat hyphens as spaces, as in Emilia-Romagna"""
+    return title.lower().replace("-", " ")
+
+
 def rank_titles(titles, season, event_name, location):
     """Order candidate titles: exact race name, then longer names, then ones with the location"""
     usable = [
@@ -35,9 +40,9 @@ def rank_titles(titles, season, event_name, location):
         and "Grand Prix" in t
         and not any(word in t.lower() for word in OTHER_SERIES)
     ]
-    wanted = f"{season} {event_name}".lower()
-    exact = [t for t in usable if t.lower() == wanted]
-    longer = [t for t in usable if t.lower().startswith(wanted) and t not in exact]
+    wanted = plain(f"{season} {event_name}")
+    exact = [t for t in usable if plain(t) == wanted]
+    longer = [t for t in usable if plain(t).startswith(wanted) and t not in exact]
     place = [t for t in usable if location.lower() in t.lower() and t not in exact + longer]
     return exact + longer + place
 
