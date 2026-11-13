@@ -1,0 +1,311 @@
+# Golden question set for python -m f1rag.eval (Section 9.2 of the technical documentation)
+#
+# No expected answer is typed here: each truth query is run on the loaded database at eval
+# time, and every value it returns must appear in the answer. Keywords come from the
+# Wikipedia race reports and are judged as groups: the answer needs one word from each group.
+#
+# Fields
+#   id, category (statistical, narrative, hybrid, trap), question
+#   race = [season, round]     the race the dashboard and the cited passages must be about
+#   tools                      tools that must be called; run_sql and search_docs must match
+#   truth                      one SELECT, or a list, whose values the answer must state
+#   ordered = true             the first column's values must appear in this order
+#   keywords                   groups of alternatives; "@name" uses a group defined below
+#   forbid                     words the answer must not contain
+#   widgets                    groups of widget types; the dashboard needs one of each group
+#   dashboard_drivers = true   every driver in the truth rows must be shown on the dashboard
+
+[groups]
+refusal = [
+    "don't have", "do not have", "doesn't have", "does not have", "not in the",
+    "isn't in", "is not in", "not loaded", "not available", "no data", "not include",
+    "only covers", "only cover", "outside",
+]
+no_telemetry = [
+    "don't have", "do not have", "doesn't have", "does not have", "not in the",
+    "not available", "no data", "not include", "isn't recorded", "not recorded", "no speed",
+]
+
+[aliases]
+"Red Bull Racing" = ["Red Bull"]
+"Haas F1 Team" = ["Haas"]
+"Kick Sauber" = ["Sauber"]
+"INTERMEDIATE" = ["inter"]
+
+[[question]]
+id = "S01"
+category = "statistical"
+question = "Who won the 2024 Monaco Grand Prix?"
+race = [2024, 8]
+tools = ["run_sql"]
+truth = "SELECT driver_code FROM results WHERE season = 2024 AND round = 8 AND finish_pos = 1"
+widgets = [["driver_card", "classification"]]
+dashboard_drivers = true
+
+[[question]]
+id = "S02"
+category = "statistical"
+question = "Who finished on the podium at the 2025 British Grand Prix, in finishing order?"
+race = [2025, 12]
+tools = ["run_sql"]
+truth = """SELECT driver_code FROM results WHERE season = 2025 AND round = 12
+           AND finish_pos <= 3 ORDER BY finish_pos"""
+ordered = true
+widgets = [["driver_card", "classification"]]
+dashboard_drivers = true
+
+[[question]]
+id = "S03"
+category = "statistical"
+question = "What was the fastest single lap of the 2025 Dutch Grand Prix, who set it and on which lap?"
+race = [2025, 15]
+tools = ["run_sql"]
+truth = """SELECT driver_code, lap_time_s, lap_number FROM laps WHERE season = 2025
+           AND round = 15 AND lap_time_s IS NOT NULL ORDER BY lap_time_s LIMIT 1"""
+widgets = [["driver_card", "lap_time_chart"]]
+dashboard_drivers = true
+
+[[question]]
+id = "S04"
+category = "statistical"
+question = "How many pit stops did Lando Norris make at the 2024 Canadian Grand Prix, and on which laps?"
+race = [2024, 9]
+tools = ["run_sql"]
+truth = [
+    "SELECT COUNT(*) FROM pit_stops WHERE season = 2024 AND round = 9 AND driver_code = 'NOR'",
+    """SELECT lap FROM pit_stops WHERE season = 2024 AND round = 9 AND driver_code = 'NOR'
+       ORDER BY stop_no""",
+]
+widgets = [["pit_stops_table", "tyre_strategy"]]
+
+[[question]]
+id = "S05"
+category = "statistical"
+question = "Which driver gained the most places from grid to finish at the 2024 São Paulo Grand Prix, and how many places?"
+race = [2024, 21]
+tools = ["run_sql"]
+truth = """SELECT driver_code, grid_pos - finish_pos AS gained FROM results
+           WHERE season = 2024 AND round = 21 AND finish_pos IS NOT NULL AND grid_pos > 0
+           ORDER BY gained DESC LIMIT 1"""
+widgets = [["driver_card", "position_chart", "classification"]]
+dashboard_drivers = true
+
+[[question]]
+id = "S06"
+category = "statistical"
+question = "Which five drivers set the fastest single laps on the hard tyre at the 2026 Barcelona Grand Prix? Rank them by each driver's best hard-tyre lap."
+race = [2026, 7]
+tools = ["run_sql"]
+truth = """SELECT driver_code FROM laps WHERE season = 2026 AND round = 7 AND compound = 'HARD'
+           AND lap_time_s IS NOT NULL GROUP BY driver_code ORDER BY MIN(lap_time_s) LIMIT 5"""
+ordered = true
+widgets = [["lap_time_chart", "tyre_strategy", "driver_card"]]
+dashboard_drivers = true
+
+[[question]]
+id = "S07"
+category = "statistical"
+question = "What was the shortest pit-lane time at the 2025 Abu Dhabi Grand Prix, and who had it?"
+race = [2025, 24]
+tools = ["run_sql"]
+truth = """SELECT driver_code, pit_lane_time_s FROM pit_stops WHERE season = 2025 AND round = 24
+           ORDER BY pit_lane_time_s LIMIT 1"""
+widgets = [["pit_stops_table"]]
+
+[[question]]
+id = "S08"
+category = "statistical"
+question = "Which team did Lewis Hamilton drive for at the 2026 Barcelona Grand Prix, and how many points did he score?"
+race = [2026, 7]
+tools = ["run_sql"]
+truth = """SELECT e.team, r.points FROM results r JOIN entries e USING (season, round, driver_code)
+           WHERE r.season = 2026 AND r.round = 7 AND r.driver_code = 'HAM'"""
+widgets = [["driver_card", "classification"]]
+
+[[question]]
+id = "S09"
+category = "statistical"
+question = "What was the highest track temperature recorded during the 2026 Barcelona Grand Prix?"
+race = [2026, 7]
+tools = ["run_sql"]
+truth = "SELECT MAX(track_temp) FROM weather WHERE season = 2026 AND round = 7"
+
+[[question]]
+id = "S10"
+category = "statistical"
+question = "How many drivers were classified as DNF at the 2025 British Grand Prix?"
+race = [2025, 12]
+tools = ["run_sql"]
+truth = "SELECT COUNT(*) FROM results WHERE season = 2025 AND round = 12 AND status = 'DNF'"
+widgets = [["classification"]]
+
+[[question]]
+id = "S11"
+category = "statistical"
+question = "Who won the Monaco Grand Prix in 2024, in 2025 and in 2026?"
+tools = ["run_sql"]
+truth = """SELECT r.driver_code FROM results r JOIN events e USING (season, round)
+           WHERE e.event_name = 'Monaco Grand Prix' AND r.finish_pos = 1 ORDER BY r.season"""
+ordered = true
+
+[[question]]
+id = "S12"
+category = "statistical"
+question = "Which team scored the most points at the 2025 British Grand Prix, and how many?"
+race = [2025, 12]
+tools = ["run_sql"]
+truth = """SELECT e.team, SUM(r.points) AS points FROM results r
+           JOIN entries e USING (season, round, driver_code)
+           WHERE r.season = 2025 AND r.round = 12 GROUP BY e.team ORDER BY points DESC LIMIT 1"""
+widgets = [["classification", "driver_card"]]
+
+[[question]]
+id = "N01"
+category = "narrative"
+question = "Why was the 2024 Monaco Grand Prix red-flagged on the first lap?"
+race = [2024, 8]
+tools = ["search_docs"]
+keywords = [["Perez"], ["Magnussen"], ["Hulkenberg"]]
+
+[[question]]
+id = "N02"
+category = "narrative"
+question = "How did the early red flag shape the tyre strategy at the 2024 Monaco Grand Prix?"
+race = [2024, 8]
+tools = ["search_docs"]
+keywords = [["red flag", "red-flag"], ["tyre", "tire", "compound"], ["pit"]]
+
+[[question]]
+id = "N03"
+category = "narrative"
+question = "What caused the first safety car at the 2024 Canadian Grand Prix?"
+race = [2024, 9]
+tools = ["search_docs"]
+keywords = [["Sargeant"]]
+
+[[question]]
+id = "N04"
+category = "narrative"
+question = "Why did Oscar Piastri get a penalty at the 2025 British Grand Prix?"
+race = [2025, 12]
+tools = ["search_docs"]
+keywords = [["brak"], ["ten-second", "10-second", "ten second", "10 second", "10s"]]
+
+[[question]]
+id = "N05"
+category = "narrative"
+question = "Why did Lando Norris retire from the 2025 Dutch Grand Prix?"
+race = [2025, 15]
+tools = ["search_docs"]
+keywords = [["oil", "smoke"]]
+
+[[question]]
+id = "N06"
+category = "narrative"
+question = "Why was the 2026 Bahrain Grand Prix held in Malaysia?"
+race = [2026, 16]
+tools = ["search_docs"]
+keywords = [["Iran", "war"], ["Sepang"]]
+
+[[question]]
+id = "N07"
+category = "narrative"
+question = "Why did Pierre Gasly's result at the 2026 Monaco Grand Prix change after the race?"
+race = [2026, 6]
+tools = ["search_docs"]
+keywords = [["penalt"], ["speed"], ["appeal", "review"]]
+
+[[question]]
+id = "N08"
+category = "narrative"
+question = "Which drivers made their Formula One debut at the 2025 Australian Grand Prix?"
+race = [2025, 1]
+tools = ["search_docs"]
+keywords = [["Hadjar"], ["Bortoleto"], ["Antonelli"]]
+
+[[question]]
+id = "H01"
+category = "hybrid"
+question = "Where did Max Verstappen start the 2024 São Paulo Grand Prix, and why was he so far back?"
+race = [2024, 21]
+tools = ["run_sql", "search_docs"]
+truth = "SELECT grid_pos FROM results WHERE season = 2024 AND round = 21 AND driver_code = 'VER'"
+keywords = [["penalt"], ["power unit", "engine"]]
+
+[[question]]
+id = "H02"
+category = "hybrid"
+question = "How did Lewis Hamilton win the 2026 Barcelona Grand Prix? Give the laps of his pit stops."
+race = [2026, 7]
+tools = ["run_sql", "search_docs"]
+truth = """SELECT lap FROM pit_stops WHERE season = 2026 AND round = 7 AND driver_code = 'HAM'
+           ORDER BY stop_no"""
+keywords = [["three-stop", "three stop", "3-stop", "three pit", "3 pit", "third stop"],
+            ["virtual safety car", "VSC"]]
+widgets = [["pit_stops_table", "tyre_strategy"]]
+
+[[question]]
+id = "H03"
+category = "hybrid"
+question = "How many safety car periods were there at the 2025 Dutch Grand Prix, and what caused each one?"
+race = [2025, 15]
+tools = ["run_sql", "search_docs"]
+truth = """SELECT COUNT(*) FROM race_control WHERE season = 2025 AND round = 15
+           AND message LIKE 'SAFETY CAR DEPLOYED%'"""
+keywords = [["Hamilton"], ["Leclerc"], ["Norris"]]
+
+[[question]]
+id = "H04"
+category = "hybrid"
+question = "Where did Nico Hülkenberg start and finish the 2025 British Grand Prix, and why was his result notable?"
+race = [2025, 12]
+tools = ["run_sql", "search_docs"]
+truth = [
+    "SELECT grid_pos FROM results WHERE season = 2025 AND round = 12 AND driver_code = 'HUL'",
+    "SELECT finish_pos FROM results WHERE season = 2025 AND round = 12 AND driver_code = 'HUL'",
+]
+keywords = [["podium"], ["239"]]
+
+[[question]]
+id = "H05"
+category = "hybrid"
+question = "Who won the 2024 Canadian Grand Prix, and how did the rain affect the race?"
+race = [2024, 9]
+tools = ["run_sql", "search_docs"]
+truth = "SELECT driver_code FROM results WHERE season = 2024 AND round = 9 AND finish_pos = 1"
+keywords = [["rain", "wet"], ["intermediate", "inter"]]
+
+[[question]]
+id = "T01"
+category = "trap"
+question = "Who won the 2023 Monaco Grand Prix?"
+keywords = ["@refusal", ["2024"]]
+
+[[question]]
+id = "T02"
+category = "trap"
+question = "How many points did Lewis Hamilton score for Ferrari at the 2024 British Grand Prix?"
+tools = ["run_sql"]
+truth = """SELECT e.team, r.points FROM results r JOIN entries e USING (season, round, driver_code)
+           WHERE r.season = 2024 AND r.round = 12 AND r.driver_code = 'HAM'"""
+
+[[question]]
+id = "T03"
+category = "trap"
+question = "What was the fastest stationary pit stop time at the 2025 Dutch Grand Prix?"
+keywords = [["pit lane", "pit-lane"], ["stationary"]]
+
+[[question]]
+id = "T04"
+category = "trap"
+question = "What was Max Verstappen's top speed at the 2025 Italian Grand Prix?"
+keywords = ["@no_telemetry"]
+forbid = ["km/h", "mph"]
+
+[[question]]
+id = "T05"
+category = "trap"
+question = "Who won the 2026 Saudi Arabian Grand Prix?"
+keywords = [["cancel", "not held", "wasn't held", "was not held", "not take place",
+             "didn't take place", "did not take place", "don't have", "do not have",
+             "not in the", "not loaded", "isn't in", "is not in"]]

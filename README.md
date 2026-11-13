@@ -107,6 +107,18 @@ python -m f1rag.ask "Why was the Bahrain race moved?" --trace
 
 The answer cites evidence IDs such as `[E1]`. Below it the command lists each piece of evidence (the SQL query or the report passages with links) and, with `--trace`, every tool call the model made. One question uses about 3 to 5 Gemini requests of the free 500 a day.
 
+## Evaluate
+
+A golden set of 30 questions (`eval/golden.toml`) measures how well the chatbot answers: 12 statistical, 8 narrative, 5 that need both kinds of source, and 5 trick questions, such as a race that isn't loaded. No expected answer is typed into the file. Each one comes from a query run on the loaded database, so the scores follow the data.
+
+```bash
+python -m f1rag.eval --check            # show the expected answers; no Gemini calls
+python -m f1rag.eval                    # ask all 30 questions (about 120 of the 500 free daily requests, 10 to 15 minutes)
+python -m f1rag.eval --only S01,N03     # or --category trap
+```
+
+Each answer is checked for the right values, the right tools, cited sources and a matching dashboard. The command prints the metrics against their targets and saves a report with every answer to `data/eval/` (git-ignored) for review. Results will be published here once the first full run is reviewed.
+
 ## Try the Phase 0 spikes
 
 Small scripts in `scripts/spikes/` that show each service working, using the 2026 Bahrain Grand Prix in Malaysia:
