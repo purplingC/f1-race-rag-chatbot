@@ -13,7 +13,7 @@ Under development, version 0.4. **Phases 0 to 3 are complete**: all completed ra
 | 2 | RAG engine: four tools, evidence IDs, command-line Q&A, race summaries | Done |
 | 3 | Streamlit interface with a query-driven dashboard | Done |
 | 4 | Evaluation and hardening | Planned |
-| 5 | Portfolio packaging | Planned |
+| 5 | Final polish and release | Planned |
 
 ## Design
 
