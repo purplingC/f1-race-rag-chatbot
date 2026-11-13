@@ -8,6 +8,8 @@ from statistics import median
 NEUTRAL_COLOR = "#9A9AA8"
 # Drivers shown in a position chart when none are named
 TOP_FINISHERS = 5
+# A pit-lane time above this is no racing stop: cars waiting out a red flag, or a repair
+LONG_STOP_S = 120
 
 
 def rows(conn, sql, params=()):
@@ -215,21 +217,41 @@ def tyre_strategy(conn, season, round_no, drivers=None):
 
 
 def pit_stops(conn, season, round_no, drivers=None):
-    """Return pit-lane times per stop and how each compares with the race's median stop"""
+    """Return pit-lane times per stop against the race's median, with red-flag waits marked"""
     found = rows(
         conn,
         "SELECT driver_code AS code, stop_no AS stop, lap, pit_lane_time_s FROM pit_stops "
         "WHERE season = ? AND round = ? ORDER BY lap, driver_code",
         (season, round_no),
     )
-    times = [row["pit_lane_time_s"] for row in found if row["pit_lane_time_s"] is not None]
+    red_laps = {row["lap"] for row in rows(
+        conn,
+        "SELECT lap_number AS lap FROM race_control WHERE season = ? AND round = ? "
+        "AND message LIKE 'RED FLAG%'",
+        (season, round_no),
+    )}
+    for row in found:
+        row["kind"] = stop_kind(row, red_laps)
+    times = [row["pit_lane_time_s"] for row in found
+             if row["pit_lane_time_s"] is not None and not row["kind"]]
     middle = round(median(times), 3) if times else None
     wanted = set(codes(drivers))
     chosen = [row for row in found if not wanted or row["code"] in wanted]
     for row in chosen:
-        both = middle is not None and row["pit_lane_time_s"] is not None
+        both = middle is not None and row["pit_lane_time_s"] is not None and not row["kind"]
         row["vs_median_s"] = round(row["pit_lane_time_s"] - middle, 3) if both else None
     return {"stops": chosen, "median_s": middle}
+
+
+def stop_kind(row, red_laps):
+    """Name a stop too long to be a racing stop: red_flag on or just before a red flag, or long"""
+    time_s = row["pit_lane_time_s"]
+    if time_s is None or time_s <= LONG_STOP_S:
+        return None
+    # A car that came in just as the red flag was shown is logged on the lap before it
+    if row["lap"] in red_laps or row["lap"] + 1 in red_laps:
+        return "red_flag"
+    return "long"
 
 
 def positions(conn, season, round_no, drivers=None):

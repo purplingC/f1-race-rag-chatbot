@@ -307,3 +307,29 @@ def test_race_summary_counts_both_vsc_wordings(tmp_path):
     card = wd.race_summary(ro, 2026, 1)
     ro.close()
     assert card["virtual_safety_cars"] == 2
+
+
+def test_red_flag_waits_and_long_stops_are_marked_and_left_out_of_the_median(tmp_path):
+    """Check long stops on or just before a red-flag lap are red-flag waits, others long stops"""
+    path = tmp_path / "pits.db"
+    c = store.connect(path)
+    store.create_schema(c)
+    with c:
+        c.execute("INSERT INTO race_control (season, round, event_no, lap_number, category, "
+                  "message) VALUES (2026, 1, 1, 3, 'Other', 'RED FLAG - RACE SUSPENDED')")
+        c.executemany(
+            "INSERT INTO pit_stops (season, round, driver_code, stop_no, lap, pit_lane_time_s) "
+            "VALUES (2026, 1, ?, 1, ?, ?)",
+            [("AAA", 2, 22.0), ("BBB", 3, 1500.0), ("CCC", 2, 1400.0), ("DDD", 5, 700.0),
+             ("EEE", 6, 24.0)],
+        )
+    c.close()
+    ro = sql_guard.connect_read_only(path)
+    data = wd.pit_stops(ro, 2026, 1)
+    ro.close()
+    kinds = {r["code"]: r["kind"] for r in data["stops"]}
+    assert kinds == {"AAA": None, "BBB": "red_flag", "CCC": "red_flag", "DDD": "long",
+                     "EEE": None}
+    assert data["median_s"] == 23.0
+    marked = {r["code"]: r["vs_median_s"] for r in data["stops"] if r["kind"]}
+    assert set(marked.values()) == {None}

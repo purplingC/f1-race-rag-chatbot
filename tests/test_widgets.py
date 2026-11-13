@@ -330,3 +330,15 @@ def test_charts_without_periods_have_no_strip():
     fig = widgets.lap_time_figure(data, DRIVERS)
     assert not strip(fig) and not fig.layout.shapes and not fig.layout.annotations
     assert fig.layout.margin.t == 12
+
+
+def test_pit_table_names_red_flag_waits_and_long_stops_in_minutes():
+    """Check a red-flag wait and a long stop are named in words, with minutes, not compared"""
+    stops = [{"code": "CCC", "stop": 2, "lap": 32, "pit_lane_time_s": 1415.3, "vs_median_s": None,
+              "kind": "red_flag"},
+             {"code": "AAA", "stop": 1, "lap": 34, "pit_lane_time_s": 777.7, "vs_median_s": None,
+              "kind": "long"}]
+    html = widgets.pit_stops_html({"stops": stops, "median_s": 23.0}, DRIVERS)
+    assert "Red-flag wait" in html and "23.6 min" in html
+    assert "Long stop" in html and "13.0 min" in html
+    assert "1415.3 s" not in html

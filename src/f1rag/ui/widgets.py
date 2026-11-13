@@ -154,15 +154,24 @@ def pit_stops_html(data, drivers):
     cells = []
     for stop in data["stops"]:
         name = (drivers.get(stop["code"]) or {}).get("name") or stop["code"]
-        diff = stop.get("vs_median_s")
+        diff, kind = stop.get("vs_median_s"), stop.get("kind")
+        time_s = stop["pit_lane_time_s"]
+        if kind:
+            # Too long to compare, so the time is in minutes and the reason in words
+            label = "Red-flag wait" if kind == "red_flag" else "Long stop"
+            pit_lane = f"{time_s / 60:.1f} min"
+            versus = f'<span style="color:{theme.MUTED}">{label}</span>'
+        else:
+            pit_lane = f"{time_s:.1f} s" if time_s is not None else "–"
+            versus = f"{diff:+.1f} s" if diff is not None else "–"
         cells.append([
             f'{esc(name)} <span style="color:{theme.MUTED}">{esc(stop["code"])}</span>',
-            esc(stop["stop"]), esc(stop["lap"]),
-            f'{stop["pit_lane_time_s"]:.1f} s' if stop["pit_lane_time_s"] is not None else "–",
-            f"{diff:+.1f} s" if diff is not None else "–",
+            esc(stop["stop"]), esc(stop["lap"]), pit_lane, versus,
         ])
     caption = (f"Pit-lane time from entry to exit, not stationary time. Race median "
                f'{data["median_s"]:.1f} s.' if data["median_s"] is not None else None)
+    if caption and any(stop.get("kind") for stop in data["stops"]):
+        caption += " Red-flag waits and long stops are left out of the median."
     return table_html(["Driver", "Stop", "Lap", "Pit lane", "vs median"], cells, caption)
 
 
