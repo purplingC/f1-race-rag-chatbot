@@ -205,3 +205,11 @@ def test_429_on_every_attempt_raises_rate_limit_error(tmp_path):
 def test_pause_keeps_under_ten_requests_a_minute():
     """Check the pause matches the limit for clients that send no contact details"""
     assert 60 / wikipedia.PAUSE_S < 10
+
+
+def test_rank_titles_ignores_hyphens_in_the_race_name():
+    """Check a race named with a space finds the article whose title uses a hyphen"""
+    titles = ["2026 Place-Holder Grand Prix", "2025 Place-Holder Grand Prix",
+              "2026 Place Holder motorcycle Grand Prix"]
+    ranked = wikipedia.rank_titles(titles, 2026, "Place Holder Grand Prix", "Mainville")
+    assert ranked == ["2026 Place-Holder Grand Prix"]

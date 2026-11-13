@@ -109,7 +109,7 @@ def make_data():
         # Listed out of time order on purpose; stop_duration must be ignored
         "pit": [
             {"driver_number": 11, "lap_number": 2, "lane_duration": 22.5,
-             "stop_duration": None, "date": "2026-01-01T10:05:00+00:00"},
+             "stop_duration": None, "date": "2026-01-01T10:03:30+00:00"},
             {"driver_number": 11, "lap_number": 1, "lane_duration": 23.1,
              "stop_duration": 2.4, "date": "2026-01-01T10:02:00+00:00"},
         ],
@@ -416,3 +416,45 @@ def test_ingest_race_fills_derived_columns(conn, data):
     stints = conn.execute("SELECT driver_code, stint_no, avg_lap_time_s FROM stints")
     averages = {(r["driver_code"], r["stint_no"]): r["avg_lap_time_s"] for r in stints}
     assert averages == {("AAA", 1): None, ("AAA", 2): 98.0, ("BBB", 1): 100.25}
+
+
+def pit_row(number, lap, date, lane=22.0):
+    """Build one placeholder OpenF1 pit row"""
+    return {"driver_number": number, "lap_number": lap, "lane_duration": lane,
+            "stop_duration": None, "date": date}
+
+
+def lap_row(code, lap, start):
+    """Build one placeholder laps row with only the fields the pit rule reads"""
+    return {"driver_code": code, "lap_number": lap, "date_start": start}
+
+
+LAP_STARTS = [lap_row("AAA", n, f"2026-01-01T10:0{n}:00+00:00") for n in range(1, 8)]
+
+
+def test_pit_stop_lap_comes_from_its_time_when_openf1_gives_another(data):
+    """Check a stop whose time falls in the out-lap gets the lap before it, whatever OpenF1 says"""
+    codes = codes_of(data["drivers"])
+    pit = [pit_row(11, 6, "2026-01-01T10:03:20+00:00")]
+    rows = structured.build_pit_stops(2026, 1, pit, codes, laps=LAP_STARTS,
+                                      race_start=RACE_SESSION["date_start"])
+    assert rows[0]["lap"] == 2
+
+
+def test_pit_records_from_before_the_race_start_are_dropped(data):
+    """Check pit-lane records logged before the race began are not stored as stops"""
+    codes = codes_of(data["drivers"])
+    pit = [pit_row(11, 1, "2026-01-01T09:10:00+00:00", lane=None),
+           pit_row(11, 2, "2026-01-01T10:03:20+00:00")]
+    rows = structured.build_pit_stops(2026, 1, pit, codes, laps=LAP_STARTS,
+                                      race_start=RACE_SESSION["date_start"])
+    assert [(r["stop_no"], r["lap"]) for r in rows] == [(1, 2)]
+
+
+def test_openf1_lap_is_kept_when_there_are_no_lap_times(data):
+    """Check a stop keeps OpenF1's lap when the driver's lap start times are missing"""
+    codes = codes_of(data["drivers"])
+    pit = [pit_row(11, 6, "2026-01-01T10:03:20+00:00")]
+    rows = structured.build_pit_stops(2026, 1, pit, codes, laps=[],
+                                      race_start=RACE_SESSION["date_start"])
+    assert rows[0]["lap"] == 6

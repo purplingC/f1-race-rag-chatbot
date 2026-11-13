@@ -34,9 +34,13 @@ class AnswerBundle:
     trace: list = field(default_factory=list)
     model: str = ""
     error: str = None
+    # A note shown with an answer that is usable but not complete, such as a draft
+    warning: str = None
     model_calls: list = field(default_factory=list)
     total_ms: int = 0
     uncited: list = field(default_factory=list)
+    # The checked dashboard plan (dashboard_planner.PlanResult), or None for no new widgets
+    dashboard: object = None
 
 
 def summarize(tool, result):
@@ -95,15 +99,24 @@ class EvidenceLog:
 
     def uncited_sentences(self, text):
         """List the answer's sentences that state something but cite no evidence"""
-        found = []
-        for line in text.split("\n"):
-            line = LABEL.sub("", line.strip().lstrip("-#> ").strip())
-            # Headings such as **What happened:** and table rows are not sentences
-            if not line or line.endswith(":") or line.endswith(":**") or line.startswith("|"):
+        return [bare for bare, cited in fact_sentences(text) if not cited]
+
+    def cited_sentences(self, text):
+        """List the answer's sentences that cite evidence"""
+        return [bare for bare, cited in fact_sentences(text) if cited]
+
+
+def fact_sentences(text):
+    """Split an answer into fact sentences, each with whether it cites evidence"""
+    found = []
+    for line in (text or "").split("\n"):
+        line = LABEL.sub("", line.strip().lstrip("-#> ").strip())
+        # Headings such as **What happened:** and table rows are not sentences
+        if not line or line.endswith(":") or line.endswith(":**") or line.startswith("|"):
+            continue
+        for sentence in SENTENCE_END.split(line):
+            bare = sentence.strip("*_() ")
+            if not bare or bare.lower().startswith(NO_FACT):
                 continue
-            for sentence in SENTENCE_END.split(line):
-                bare = sentence.strip("*_() ")
-                if not bare or CITED.search(sentence) or bare.lower().startswith(NO_FACT):
-                    continue
-                found.append(bare)
-        return found
+            found.append((bare, bool(CITED.search(sentence))))
+    return found

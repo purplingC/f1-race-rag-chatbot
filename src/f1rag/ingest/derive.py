@@ -98,3 +98,14 @@ def add_stint_averages(stints, laps, pit_stops):
             row["avg_lap_time_s"] = round(sum(clean) / len(clean), 3) if clean else None
         rows.append(row)
     return rows
+
+
+def pit_stop_lap(date, lap_starts):
+    """Return the lap a pit stop belongs to: the lap before the one its time falls in"""
+    # OpenF1's lap_number on pit rows was wrong for 10 stops in the 2026 Australian Grand Prix
+    # while their time was right; this rule agrees with every other 2026 stop (821 of 821)
+    if not date or not lap_starts:
+        return None
+    moment = datetime.fromisoformat(date)
+    started = [lap for start, lap in sorted(lap_starts) if start <= moment]
+    return started[-1] - 1 if started and started[-1] > 1 else None

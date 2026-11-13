@@ -1,5 +1,7 @@
 """System prompt for the question loop and the instruction for the final JSON answer"""
 
+from f1rag.engine.dashboard_planner import WidgetType
+
 # Tables and columns described to the model, nothing else is exposed (Section 6.3)
 # A test checks that every column named here exists in store.SCHEMA
 TABLES = {
@@ -54,7 +56,8 @@ TABLES = {
     "pit_stops": {
         "about": "Pit stops with pit-lane time only, stationary time is not available",
         "columns": {
-            "season": "", "round": "", "driver_code": "", "stop_no": "", "lap": "",
+            "season": "", "round": "", "driver_code": "", "stop_no": "",
+            "lap": "the lap the car came in on; use it as the stop's lap",
             "pit_lane_time_s": "seconds from pit entry to pit exit",
         },
     },
@@ -92,8 +95,12 @@ DATA_NOTES = [
     "A red flag is a race_control row whose message starts with 'RED FLAG' "
     "(message LIKE 'RED FLAG%'); it is not in the flag column.",
     "Safety car periods start with race_control category 'SafetyCar' and message "
-    "'SAFETY CAR DEPLOYED'; virtual safety car periods with message 'VSC DEPLOYED'.",
+    "'SAFETY CAR DEPLOYED'; virtual safety car periods with message 'VSC DEPLOYED' (2026) "
+    "or 'VIRTUAL SAFETY CAR DEPLOYED' (2024 and 2025), so match both.",
     "Pit data is pit-lane time, never stationary time. Say so when you report it.",
+    "Cars waiting in the pit lane during a red flag are stored as stops lasting many minutes. "
+    "Leave out stops with pit_lane_time_s > 120 when comparing or ranking pit stops, "
+    "and say they were red-flag stops.",
     "Compound can be UNKNOWN when the source did not report it.",
     "Rounds are numbered among races that were held; cancelled races are not stored.",
 ]
@@ -101,6 +108,9 @@ DATA_NOTES = [
 RULES = [
     "You answer questions about Formula 1 races using only tool results. Never use prior "
     "knowledge for any F1 fact: no results, names, teams, numbers or quotes from memory.",
+    "Answer only questions about Formula 1 races in the loaded data. For anything else, "
+    "including general knowledge, coding or chit-chat, call no tool and reply in one short "
+    "sentence that you only cover the loaded Formula 1 races.",
     "To identify a race from a name, country, year or date, call find_race. If it returns "
     "several matches, use the latest and state the assumption, or ask the user.",
     "Call get_data_coverage only when find_race finds nothing, when no race is named, or "
@@ -130,16 +140,51 @@ RULES = [
 ]
 
 FINAL_INSTRUCTION = (
-    "Now write the final answer for the user as JSON with one field, answer_md: Markdown "
-    "text that follows the rules and states any assumption, such as which race was used. "
-    "Every sentence that states a fact ends with its evidence id in square brackets, for "
-    "example [E2]. Leave out any fact you cannot cite. Use only facts from the tool results "
-    "above."
+    "Now write the final answer for the user as JSON. answer_md: Markdown text that follows "
+    "the rules and states any assumption, such as which race was used. Every sentence that "
+    "states a fact ends with its evidence id in square brackets, for example [E2]. Leave out "
+    "any fact you cannot cite. Use only facts from the tool results above. "
+    "dashboard: the widgets that best support the answer, for the race the answer is about "
+    "(season and round). Choose up to four of classification (final order), lap_time_chart "
+    "(lap times of the given drivers, optional laps as [first, last]), tyre_strategy, "
+    "pit_stops_table, position_chart and race_summary_card, plus driver_card for the drivers "
+    "the answer is about. At most five drivers per widget, driver codes and evidence ids only "
+    "from the tool results. The charts get their numbers from the database, so never put "
+    "numbers in the dashboard. Leave dashboard out when no race data was used."
 )
 
 ANSWER_SCHEMA = {
     "type": "object",
-    "properties": {"answer_md": {"type": "string"}},
+    "properties": {
+        "answer_md": {"type": "string"},
+        "dashboard": {
+            "type": "object",
+            "properties": {
+                "race": {
+                    "type": "object",
+                    "properties": {"season": {"type": "integer"}, "round": {"type": "integer"}},
+                    "required": ["season", "round"],
+                },
+                "widgets": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type": {"type": "string", "enum": list(WidgetType.__args__)},
+                            "drivers": {"type": "array", "items": {"type": "string"}},
+                            "laps": {
+                                "type": "array", "items": {"type": "integer"},
+                                "minItems": 2, "maxItems": 2,
+                            },
+                        },
+                        "required": ["type"],
+                    },
+                },
+                "evidence": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["race", "widgets"],
+        },
+    },
     "required": ["answer_md"],
 }
 

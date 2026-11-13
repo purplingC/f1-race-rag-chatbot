@@ -2,15 +2,33 @@
 
 import time
 
-from f1rag.engine import prompts, tools
+from f1rag.engine import dashboard_planner, prompts, tools
 from f1rag.engine.evidence import AnswerBundle, EvidenceLog
-from f1rag.engine.llm import LLMUnavailableError, parse_json
+from f1rag.engine.llm import ATTEMPTS, LLMUnavailableError, parse_json
 
 # Most model turns with tool calls before the final answer is forced
 MAX_STEPS = 8
 # One failed query may be fixed by the model; after the second failure run_sql is refused
 MAX_SQL_ERRORS = 2
 NO_DATA = "I don't have that in the ingested data."
+DRAFT_NOTE = (
+    "Gemini was busy for the final step, so this is its draft answer "
+    "(citations checked, dashboard chosen by rules)"
+)
+# Shown when the model answered without looking anything up: facts must come from tools,
+# so such an answer is replaced, whatever the model wrote (off-topic questions, greetings)
+OFF_TOPIC = (
+    "I can only answer questions about the Formula 1 races loaded here. Try asking who won a "
+    "race, how a driver's race went, or how the tyre strategies compared."
+)
+# What the user sees while each tool runs
+STEP_WORDS = {
+    "find_race": "Finding the race",
+    "run_sql": "Looking up the race data",
+    "search_docs": "Reading the race reports",
+    "get_data_coverage": "Checking which races are loaded",
+}
+FINAL_STEP = "Writing the answer"
 # Arguments each tool accepts, read from the descriptions given to the model
 ALLOWED_ARGS = {t["name"]: set(t["parameters"]["properties"]) for t in tools.DECLARATIONS}
 
@@ -55,7 +73,17 @@ class Session:
 
     def generate(self, contents, purpose, **kwargs):
         """Call the model once and record how long it took and how often it retried"""
-        reply = self.llm.generate(contents, prompts.system_prompt(), **kwargs)
+        started = time.monotonic()
+        try:
+            reply = self.llm.generate(contents, prompts.system_prompt(), **kwargs)
+        except LLMUnavailableError:
+            # A call that gave up still shows in the trace, with the time it cost
+            self.model_calls.append({
+                "step": len(self.model_calls) + 1, "purpose": purpose,
+                "ms": round((time.monotonic() - started) * 1000),
+                "retries": ATTEMPTS - 1, "failed": True,
+            })
+            raise
         self.model_calls.append({
             "step": len(self.model_calls) + 1, "purpose": purpose,
             "ms": getattr(reply, "ms", 0), "retries": getattr(reply, "retries", 0),
@@ -85,9 +113,18 @@ class Session:
         return {"evidence_id": evidence_id, **result}
 
 
-def answer(question, llm, conn, collection, history=None, max_steps=MAX_STEPS):
-    """Answer one question with tools and return the answer, its evidence and the trace"""
+def answer(question, llm, conn, collection, history=None, max_steps=MAX_STEPS, default_race=None,
+           on_progress=None):
+    """Answer one question with tools and return the answer, evidence, trace and dashboard"""
     started = time.monotonic()
+    said = []
+
+    def progress(words):
+        """Tell the caller what is happening, once per change, in plain words"""
+        if on_progress and (not said or said[-1] != words):
+            said.append(words)
+            on_progress(words)
+
     session = Session(llm, conn, collection)
     contents = []
     for role, text in history or []:
@@ -102,18 +139,37 @@ def answer(question, llm, conn, collection, history=None, max_steps=MAX_STEPS):
             draft = reply.text or draft
             if not reply.calls:
                 break
-            results = [(call.name, session.handle(step, call)) for call in reply.calls]
+            results = []
+            for call in reply.calls:
+                progress(STEP_WORDS.get(call.name, "Looking things up"))
+                results.append((call.name, session.handle(step, call)))
             contents.append(llm.tool_results_turn(results))
-        contents.append(llm.user_turn(prompts.FINAL_INSTRUCTION))
-        final = session.generate(contents, "final", json_schema=prompts.ANSWER_SCHEMA)
     except LLMUnavailableError as error:
         return bundle(question, session, llm, str(error), started, error=str(error))
+    if not session.evidence.items:
+        # Nothing was looked up, so nothing in an answer could be grounded
+        return bundle(question, session, llm, OFF_TOPIC, started)
+    progress(FINAL_STEP)
+    contents.append(llm.user_turn(prompts.FINAL_INSTRUCTION))
+    try:
+        final = session.generate(contents, "final", json_schema=prompts.ANSWER_SCHEMA)
+    except LLMUnavailableError as error:
+        if not draft.strip():
+            return bundle(question, session, llm, str(error), started, error=str(error))
+        # The facts and a cited draft already exist, so only the formatting step is lost
+        board = dashboard_planner.plan(question, None, session.evidence, conn, default_race)
+        return bundle(question, session, llm, draft.strip(), started, dashboard=board,
+                      warning=DRAFT_NOTE)
     parsed = parse_json(final.text) or {}
     text = (parsed.get("answer_md") or draft or NO_DATA).strip()
-    return bundle(question, session, llm, text, started)
+    # The model only picks widgets; the planner checks them and the widgets fetch the numbers
+    board = dashboard_planner.plan(
+        question, parsed.get("dashboard"), session.evidence, conn, default_race
+    )
+    return bundle(question, session, llm, text, started, dashboard=board)
 
 
-def bundle(question, session, llm, text, started, error=None):
+def bundle(question, session, llm, text, started, error=None, dashboard=None, warning=None):
     """Check the citations and pack the answer, evidence and trace into an AnswerBundle"""
     clean, cited = session.evidence.validate_citations(text)
     return AnswerBundle(
@@ -122,4 +178,6 @@ def bundle(question, session, llm, text, started, error=None):
         model_calls=session.model_calls,
         total_ms=round((time.monotonic() - started) * 1000),
         uncited=[] if error else session.evidence.uncited_sentences(clean),
+        dashboard=dashboard,
+        warning=warning,
     )

@@ -163,12 +163,22 @@ def build_stints(season, round_no, stints, codes):
     return rows
 
 
-def build_pit_stops(season, round_no, pit, codes):
+def build_pit_stops(season, round_no, pit, codes, laps=None, race_start=None):
     """Build pit_stops rows numbered per driver in time order, with pit-lane time only"""
     ordered = sorted(pit, key=lambda row: (row["date"] or "", row["lap_number"] or 0))
+    starts = {}
+    for lap in laps or []:
+        if lap.get("date_start"):
+            starts.setdefault(lap["driver_code"], []).append(
+                (datetime.fromisoformat(lap["date_start"]), lap["lap_number"])
+            )
+    begin = datetime.fromisoformat(race_start) if race_start else None
     stop_count = {}
     rows = []
     for row in ordered:
+        # Pit-lane records from before the race began are not race stops (2026 round 19)
+        if begin and row["date"] and datetime.fromisoformat(row["date"]) < begin:
+            continue
         code = code_of(codes, row["driver_number"])
         stop_count[code] = stop_count.get(code, 0) + 1
         rows.append(
@@ -177,7 +187,7 @@ def build_pit_stops(season, round_no, pit, codes):
                 "round": round_no,
                 "driver_code": code,
                 "stop_no": stop_count[code],
-                "lap": row["lap_number"],
+                "lap": derive.pit_stop_lap(row["date"], starts.get(code)) or row["lap_number"],
                 # lane_duration is pit entry to exit; stop_duration is never stored
                 "pit_lane_time_s": row["lane_duration"],
             }
@@ -266,7 +276,9 @@ def ingest_race(conn, client, season, race_session, round_no):
     codes = driver_codes(data["drivers"])
     laps = build_laps(season, round_no, data["laps"], codes)
     stints = build_stints(season, round_no, data["stints"], codes)
-    pit_stops = build_pit_stops(season, round_no, data["pit"], codes)
+    pit_stops = build_pit_stops(
+        season, round_no, data["pit"], codes, laps=laps, race_start=race_session["date_start"]
+    )
 
     # Derived columns: tyre data and position on laps, average pace on stints
     laps = derive.add_stint_columns(laps, stints)

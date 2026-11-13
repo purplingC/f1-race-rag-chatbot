@@ -122,7 +122,8 @@ def test_tool_results_sent_to_the_model_carry_evidence_ids(conn, collection):
 
 def test_final_call_uses_json_mode_without_tools(conn, collection):
     """Check the last call asks for JSON and offers no tools"""
-    llm = FakeLLM([LLMReply(text="No tools needed"), final("I don't have that.")])
+    llm = FakeLLM([calls(("get_data_coverage", {})), LLMReply(text="Draft"),
+                   final("I don't have that [E1].")])
     orchestrator.answer("Hello", llm, conn, collection)
     assert llm.sent[0]["tools"] and llm.sent[0]["json"] is None
     assert llm.sent[-1]["tools"] is None and llm.sent[-1]["json"]
@@ -186,9 +187,10 @@ def test_loop_stops_after_max_steps_and_still_answers(conn, collection):
 
 def test_invalid_final_json_falls_back_to_the_draft(conn, collection):
     """Check a final reply that is not JSON falls back to the last plain answer"""
-    llm = FakeLLM([LLMReply(text="Plain draft"), LLMReply(text="not json")])
+    llm = FakeLLM([calls(("get_data_coverage", {})), LLMReply(text="Plain draft [E1]"),
+                   LLMReply(text="not json")])
     result = orchestrator.answer("Hi", llm, conn, collection)
-    assert result.answer_md == "Plain draft"
+    assert result.answer_md == "Plain draft [E1]"
 
 
 def test_rate_limit_gives_a_clear_error_bundle(conn, collection):
@@ -207,3 +209,94 @@ def test_history_is_sent_before_the_new_question(conn, collection):
     assert llm.sent[0]["contents"] == [
         ("user", "Earlier question"), ("model", "Earlier answer"), ("user", "Follow-up"),
     ]
+
+
+def final_with(text, dashboard):
+    """Build a final JSON reply that also carries a dashboard spec"""
+    return LLMReply(text=json.dumps({"answer_md": text, "dashboard": dashboard}))
+
+
+def test_a_valid_dashboard_from_the_model_is_kept(conn, collection):
+    """Check the model's dashboard spec reaches the bundle when it passes validation"""
+    spec = {"race": {"season": 2026, "round": 1}, "widgets": [{"type": "classification"}],
+            "evidence": ["E1"]}
+    llm = FakeLLM([calls(("run_sql", {"query": WINNER_SQL})), LLMReply(text="ok"),
+                   final_with("AAA won [E1].", spec)])
+    result = orchestrator.answer("Who won?", llm, conn, collection)
+    assert result.dashboard.source == "model"
+    assert [w.type for w in result.dashboard.spec.widgets] == ["classification"]
+
+
+def test_a_missing_dashboard_is_built_by_the_fallback(conn, collection):
+    """Check an answer without a spec still gets a dashboard from the rules"""
+    llm = FakeLLM([calls(("run_sql", {"query": WINNER_SQL + " AND season = 2026 AND round = 1"})),
+                   LLMReply(text="ok"), final("AAA won [E1].")])
+    result = orchestrator.answer("Who won?", llm, conn, collection)
+    assert result.dashboard.source == "fallback"
+
+
+def test_no_dashboard_when_gemini_is_unavailable(conn, collection):
+    """Check an error answer carries no dashboard"""
+    llm = FakeLLM([LLMUnavailableError("Gemini is still busy (tried 4 times)")])
+    assert orchestrator.answer("Who won?", llm, conn, collection).dashboard is None
+
+
+BUSY = "Gemini is still busy (tried 4 times). Try again in a few minutes"
+
+
+def test_draft_answer_is_used_when_only_the_final_step_fails(conn, collection):
+    """Check a busy final call still gives the cited draft, a note and a rule-based dashboard"""
+    llm = FakeLLM([
+        calls(("run_sql", {"query": WINNER_SQL + " AND season = 2026 AND round = 1"})),
+        LLMReply(text="AAA won [E1]. Unknown [E5]."),
+        LLMUnavailableError(BUSY),
+    ])
+    result = orchestrator.answer("Who won?", llm, conn, collection)
+    assert result.error is None
+    assert result.answer_md == "AAA won [E1]. Unknown."
+    assert result.cited == ["E1"]
+    assert "busy" in result.warning and "draft" in result.warning
+    assert result.dashboard.source == "fallback"
+
+
+def test_failed_model_calls_are_recorded_in_the_trace(conn, collection):
+    """Check a call that fails after its retries still appears, marked failed, with its time"""
+    llm = FakeLLM([calls(("run_sql", {"query": WINNER_SQL})), LLMUnavailableError(BUSY)])
+    result = orchestrator.answer("Who won?", llm, conn, collection)
+    assert result.error == BUSY
+    assert [c.get("failed", False) for c in result.model_calls] == [False, True]
+    failed = result.model_calls[-1]
+    assert failed["purpose"] == "tools" and failed["ms"] >= 0
+    assert failed["retries"] == 3
+
+
+def test_without_a_draft_a_failed_final_step_is_still_an_error(conn, collection):
+    """Check no draft text means the error is reported, not an empty answer"""
+    llm = FakeLLM([calls(("run_sql", {"query": WINNER_SQL})), LLMReply(text=""),
+                   LLMUnavailableError(BUSY)])
+    result = orchestrator.answer("Who won?", llm, conn, collection)
+    assert result.error == BUSY
+    assert result.model_calls[-1]["purpose"] == "final"
+
+
+def test_a_question_answered_without_any_tool_gets_the_off_topic_reply(conn, collection):
+    """Check an answer with no evidence is replaced by the fixed F1-only reply"""
+    llm = FakeLLM([LLMReply(text="Paris is the capital of France."),
+                   final("Paris is the capital of France.")])
+    result = orchestrator.answer("What is the capital of France?", llm, conn, collection)
+    assert result.answer_md == orchestrator.OFF_TOPIC
+    assert result.dashboard is None and result.error is None and result.cited == []
+
+
+def test_progress_steps_are_reported_in_plain_words(conn, collection):
+    """Check each tool call and the final step are announced in plain words, in order"""
+    steps = []
+    llm = FakeLLM([
+        calls(("find_race", {"name": "Placeholder"})),
+        calls(("run_sql", {"query": WINNER_SQL}), ("search_docs", {"query": "race"})),
+        LLMReply(text="Draft"), final("AAA won [E2]."),
+    ])
+    orchestrator.answer("Who won?", llm, conn, collection, on_progress=steps.append)
+    assert steps == ["Finding the race", "Looking up the race data", "Reading the race reports",
+                     "Writing the answer"]
+    assert not any("_" in step for step in steps)
