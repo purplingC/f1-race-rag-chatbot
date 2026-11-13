@@ -92,7 +92,7 @@ def test_run_scores_each_question_prints_metrics_and_saves_a_report(tmp_path, fa
     assert code == 0
     assert "S01  statistical  pass" in text and "S02  statistical  pass" in text
     assert "Numeric accuracy          2/2 (100%)" in text
-    assert len(waits) == 1 and 19 <= waits[0] <= 20
+    assert len(waits) == 1 and 34 <= waits[0] <= 35
     report = next((tmp_path / "reports").glob("eval-*.md")).read_text(encoding="utf-8")
     assert "| Numeric accuracy | 2/2 (100%) | ≥ 90% | yes |" in report
     assert "Expected values: AAA" in report

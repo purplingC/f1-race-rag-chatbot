@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+from f1rag.engine.llm import RETRY_WAITS_S
+
 CATEGORIES = ("statistical", "narrative", "hybrid", "trap")
 TOOLS = {"find_race", "run_sql", "search_docs", "get_data_coverage"}
 # Routing is judged on the tools that fetch facts; find_race and coverage checks are steps
@@ -31,6 +33,8 @@ NUMBER_WORDS |= {
 CITATIONS = re.compile(r"\[E\d+(?:\s*,\s*E\d+)*\]")
 # A lap time such as 1:32.456, or a plain number such as 23.4
 NUMBER = re.compile(r"(?<![\w.])(?:(\d+):(\d{2}(?:\.\d+)?)|(\d+(?:\.\d+)?))(?![\d:])")
+# A list number such as "1." at the start of a line or after a colon or citation
+LIST_MARKER = re.compile(r"(?:^|(?<=[:\]]))\s*\d{1,2}\.(?=\s)", re.M)
 WORD_NUMBER = re.compile(r"\b(" + "|".join(NUMBER_WORDS) + r")\b")
 # Targets from Section 9.3 of the technical documentation
 TARGETS = {
@@ -38,6 +42,9 @@ TARGETS = {
     "Dashboard relevance": 0.85, "Evidence linkage": 1.0, "Refusal correctness": 1.0,
 }
 LATENCY_TARGETS = {"Latency p50": (0.50, 10.0), "Latency p95": (0.95, 20.0)}
+# The same figures without the pauses forced by the free tier's rate limit
+QUIET_LATENCY = {"Latency p50 without waits": (0.50, 10.0),
+                 "Latency p95 without waits": (0.95, 20.0)}
 
 
 class GoldenError(Exception):
@@ -74,6 +81,7 @@ class Score:
     dashboard: list
     unsupported: list
     seconds: float
+    waits: float = 0.0
 
     @property
     def checks(self):
@@ -332,13 +340,22 @@ def evidence_numbers(value):
 
 def unsupported_numbers(bundle):
     """List the numbers in the answer that appear in no tool result, for a person to review"""
+    # Numbers the user wrote, such as a year in the question, need no source
     known = evidence_numbers([item.result for item in bundle.evidence])
+    known += [number for _, number, _ in numbers_in(bundle.question, words=False)]
+    text = LIST_MARKER.sub(lambda m: " " * len(m.group()), bundle.answer_md or "")
+    text = without_citations(text)
     unsupported = []
-    for match in NUMBER.finditer(without_citations(bundle.answer_md)):
+    for match in NUMBER.finditer(text):
         value, decimals = parse_number(match)
         if not any(number_matches(number, value, decimals) for number in known):
             unsupported.append(match.group())
     return unsupported
+
+
+def wait_seconds(bundle):
+    """Add up the seconds the answer spent waiting on Gemini's rate limit before retrying"""
+    return sum(sum(RETRY_WAITS_S[:call.get("retries", 0)]) for call in bundle.model_calls)
 
 
 def score(q, bundle, conn, names, aliases):
@@ -350,6 +367,7 @@ def score(q, bundle, conn, names, aliases):
         routing=check_routing(q, bundle), sources=check_sources(q, bundle),
         dashboard=check_dashboard(q, bundle, rows, names),
         unsupported=unsupported_numbers(bundle), seconds=round(bundle.total_ms / 1000, 1),
+        waits=wait_seconds(bundle),
     )
 
 
@@ -405,8 +423,15 @@ def metrics(scores):
         {**share_row("Groundedness (automatic)", sum(not s.unsupported for s in scores),
                      len(scores)), "target": "100% after review", "met": None},
     ]
-    seconds = [s.seconds for s in scores]
-    for metric, (share, limit) in LATENCY_TARGETS.items():
+    rows += latency_rows([s.seconds for s in scores], LATENCY_TARGETS)
+    rows += latency_rows([max(0.0, s.seconds - s.waits) for s in scores], QUIET_LATENCY)
+    return rows
+
+
+def latency_rows(seconds, targets):
+    """Describe the latency percentiles of a run against their targets"""
+    rows = []
+    for metric, (share, limit) in targets.items():
         if not seconds:
             rows.append({"metric": metric, "result": "not run", "target": f"≤ {limit:.0f} s",
                          "met": None})

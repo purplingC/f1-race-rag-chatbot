@@ -11,9 +11,9 @@ from f1rag import config, golden, vectors
 from f1rag.engine import orchestrator, sql_guard
 from f1rag.engine.llm import GeminiLLM, LLMUnavailableError
 
-# Seconds from the start of one question to the next: about 4 Gemini calls each stays under
-# the free limit of 15 requests a minute
-DEFAULT_GAP_S = 20
+# Seconds from the start of one question to the next: a question can take 5 or 6 Gemini calls,
+# and the free limit is 15 requests a minute (20 s hit the limit in the first real run)
+DEFAULT_GAP_S = 35
 # Two failed answers in a row usually mean the daily quota is used up, so the run stops
 MAX_ERRORS_IN_ROW = 2
 

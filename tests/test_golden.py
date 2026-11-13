@@ -255,6 +255,21 @@ def test_unsupported_numbers_lists_numbers_missing_from_tool_output():
     assert golden.unsupported_numbers(bundle) == ["99"]
 
 
+def test_unsupported_numbers_skip_list_markers_and_numbers_from_the_question():
+    """Check list numbers and numbers the user wrote in the question are not flagged"""
+    text = "Ranked [E1]: 1. Aardvark [E1] 2. Belanger\n3. Cormorant. No 1999 data on lap 4. "
+    bundle = answer(text + "Then 99 laps.", evidence=[sql_item()])
+    bundle.question = "Who won in 1999?"
+    assert golden.unsupported_numbers(bundle) == ["4", "99"]
+
+
+def test_wait_seconds_adds_up_the_rate_limit_pauses():
+    """Check the time spent waiting on Gemini's rate limit is worked out from the retries"""
+    bundle = answer("x")
+    bundle.model_calls = [{"retries": 0}, {"retries": 2}, {"retries": 3, "failed": True}]
+    assert golden.wait_seconds(bundle) == 5 + 15 + 5 + 15 + 40
+
+
 def test_score_combines_the_checks():
     """Check a score passes only when every check that applies passes"""
     conn = make_conn()
@@ -289,6 +304,7 @@ def test_metrics_compare_results_with_the_targets():
     assert rows["Refusal correctness"]["met"] is True
     assert rows["Evidence linkage"]["result"] == "1/1 (100%)"
     assert rows["Latency p50"]["result"] == "4.2 s"
+    assert rows["Latency p50 without waits"]["result"] == "4.2 s"
     assert rows["Groundedness (automatic)"]["met"] is None
     # A category with no questions is shown as not run rather than as a pass
     assert rows["Hybrid answers"]["result"] == "not run"

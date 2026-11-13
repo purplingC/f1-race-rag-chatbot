@@ -113,7 +113,7 @@ A golden set of 30 questions (`eval/golden.toml`) measures how well the chatbot 
 
 ```bash
 python -m f1rag.eval --check            # show the expected answers; no Gemini calls
-python -m f1rag.eval                    # ask all 30 questions (about 120 of the 500 free daily requests, 10 to 15 minutes)
+python -m f1rag.eval                    # ask all 30 questions (about 120 of the 500 free daily requests, about 18 minutes)
 python -m f1rag.eval --only S01,N03     # or --category trap
 ```
 

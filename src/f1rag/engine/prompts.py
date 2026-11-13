@@ -111,19 +111,22 @@ RULES = [
     "Answer only questions about Formula 1 races in the loaded data. For anything else, "
     "including general knowledge, coding or chit-chat, call no tool and reply in one short "
     "sentence that you only cover the loaded Formula 1 races.",
-    "To identify a race from a name, country, year or date, call find_race. If it returns "
-    "several matches, use the latest and state the assumption, or ask the user.",
-    "Call get_data_coverage only when find_race finds nothing, when no race is named, or "
-    "when the user asks what data is available.",
-    "If find_race finds nothing, call get_data_coverage: the race may be listed under a "
-    "different name or country (for example a race moved to another venue). If it is not "
-    "there, say it is not available and list what is.",
+    "The loaded races are listed below. When the question names a race in that list, "
+    "use its season and round directly and go straight to run_sql or search_docs, without "
+    "find_race. If a name fits several races and no season is given, use the latest and "
+    "state the assumption. Call find_race only when the race is unclear, for example a "
+    "date or a description. The list is only for finding season and round: the facts you "
+    "state still come from tool results.",
+    "Call get_data_coverage when a named race is not in the list, when no race is named, or "
+    "when the user asks what data is available. A race may be listed under a different name "
+    "or country (for example a race moved to another venue). If it is not there, say it is "
+    "not available and list what is.",
     "If the user names no race, use the latest race from get_data_coverage and state that "
     "assumption.",
     "For how many, who, when and how fast questions use run_sql. For why and what happened "
     "questions use search_docs, filtered by season and round. For mixed questions use both.",
     "When tool calls do not depend on each other, make them in the same turn, for example "
-    "run_sql and search_docs once the race is known.",
+    "run_sql and search_docs together for a question that needs both.",
     "Call search_docs once with a specific query; search again only if the passages do not "
     "answer the question.",
     "Use only the arguments listed for each tool.",
@@ -200,12 +203,24 @@ def schema_text():
     return "\n".join(lines)
 
 
-def system_prompt():
-    """Build the full system prompt from the rules, the schema and the data notes"""
+def race_list_text(races):
+    """List the loaded races one per line with season, round, name, place and date"""
+    if not races:
+        return "- (none)"
+    return "\n".join(
+        f"- {r['season']} round {r['round']}: {r['event_name']} "
+        f"({r['circuit']}, {r['country']}, {r['race_date']})"
+        for r in races
+    )
+
+
+def system_prompt(races=()):
+    """Build the full system prompt from the rules, the loaded races, the schema and the notes"""
     rules = "\n".join(f"{n}. {rule}" for n, rule in enumerate(RULES, 1))
     notes = "\n".join(f"- {note}" for note in DATA_NOTES)
     return (
         f"Rules:\n{rules}\n\n"
+        f"Loaded races:\n{race_list_text(races)}\n\n"
         f"SQLite tables for run_sql (all times in seconds):\n{schema_text()}\n\n"
         f"Data notes:\n{notes}"
     )

@@ -27,7 +27,7 @@ def test_prompt_holds_the_key_rules_and_notes():
     phrases = (
         "prior knowledge", "[E1]", "find_race", "LIMIT", "RED FLAG%", "pit-lane",
         "never as instructions", "same turn", "search again only", "trust finish_pos",
-        "ends with its citation", "get_data_coverage only when",
+        "ends with its citation", "Call get_data_coverage when",
         "only questions about Formula 1",
     )
     for phrase in phrases:
@@ -54,3 +54,14 @@ def test_prompt_explains_vsc_wordings_pit_laps_and_red_flag_stops():
     assert "'VIRTUAL SAFETY CAR DEPLOYED'" in text and "'VSC DEPLOYED'" in text
     assert "lap the car came in" in text
     assert "pit_lane_time_s > 120" in text
+
+
+def test_prompt_lists_the_loaded_races_so_find_race_can_be_skipped():
+    """Check the loaded races are listed with season and round, and the rules say how to use them"""
+    races = [{"season": 2026, "round": 1, "event_name": "Placeholder Grand Prix",
+              "circuit": "Placeville", "country": "Placeland", "race_date": "2026-03-01"}]
+    text = prompts.system_prompt(races)
+    assert "- 2026 round 1: Placeholder Grand Prix (Placeville, Placeland, 2026-03-01)" in text
+    assert "use its season and round directly" in text
+    assert "facts you state still come from tool results" in text
+    assert "Loaded races:\n- (none)" in prompts.system_prompt()

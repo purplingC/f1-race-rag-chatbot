@@ -11,9 +11,10 @@ DECLARATIONS = [
     {
         "name": "find_race",
         "description": (
-            "Find ingested races by season, name, country or exact date. Use this first whenever "
-            "the user refers to a race. Returns up to 5 matches, latest first, with an ambiguous "
-            "flag; an empty list means the race is not in the data."
+            "Find ingested races by season, name, country or exact date. Use it when the race "
+            "is not clearly in the loaded race list, for example a date or a description. "
+            "Returns up to 5 matches, latest first, with an ambiguous flag; an empty list means "
+            "the race is not in the data."
         ),
         "parameters": {
             "type": "object",

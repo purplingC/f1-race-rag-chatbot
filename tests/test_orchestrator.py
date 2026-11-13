@@ -33,7 +33,8 @@ class FakeLLM:
 
     def generate(self, contents, system, tools=None, json_schema=None):
         """Record the call and return the next scripted reply"""
-        self.sent.append({"contents": list(contents), "tools": tools, "json": json_schema})
+        self.sent.append({"contents": list(contents), "tools": tools, "json": json_schema,
+                          "system": system})
         reply = self.replies.pop(0)
         if isinstance(reply, Exception):
             raise reply
@@ -300,3 +301,12 @@ def test_progress_steps_are_reported_in_plain_words(conn, collection):
     assert steps == ["Finding the race", "Looking up the race data", "Reading the race reports",
                      "Writing the answer"]
     assert not any("_" in step for step in steps)
+
+
+def test_system_prompt_lists_the_loaded_races(conn, collection):
+    """Check every model call gets the races in the database, so it can skip find_race"""
+    llm = FakeLLM([calls(("run_sql", {"query": "SELECT 1"})), LLMReply(text="Draft"),
+                   final("Done [E1].")])
+    orchestrator.answer("Who won the Placeholder Grand Prix?", llm, conn, collection)
+    race = "- 2026 round 1: Placeholder Grand Prix (Placeville, Placeland, 2026-03-01)"
+    assert all(race in sent["system"] for sent in llm.sent)
