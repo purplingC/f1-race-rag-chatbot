@@ -4,21 +4,21 @@ A chatbot that answers Formula 1 race questions from ingested data. It routes ea
 
 ## Status
 
-Under development, version 0.3. **Phases 0 to 2 are complete**: the 2026 races are loaded into SQLite and ChromaDB, each with a generated race summary, and the command-line Q&A answers questions with cited evidence. **Phase 3 is in progress**: the web app runs, with the dashboard, chat, evidence and driver avatars.
+Under development, version 0.4. **Phases 0 to 3 are complete**: all completed races of 2024, 2025 and 2026 (68 races) are loaded into SQLite and ChromaDB, each with its Wikipedia report and a generated race summary. The command-line Q&A and the Streamlit web app answer questions with cited evidence, and the dashboard shows the widgets that support each answer. **Phase 4 (evaluation) is next.**
 
 | Phase | Goal | Status |
 |---|---|---|
 | 0 | Setup, check that Gemini, OpenF1 and Wikipedia work | Done |
 | 1 | Ingestion into SQLite and ChromaDB | Done |
 | 2 | RAG engine: four tools, evidence IDs, command-line Q&A, race summaries | Done |
-| 3 | Streamlit interface with a query-driven dashboard | In progress |
+| 3 | Streamlit interface with a query-driven dashboard | Done |
 | 4 | Evaluation and hardening | Planned |
 | 5 | Portfolio packaging | Planned |
 
 ## Design
 
 - **Routing:** the model calls one or more of four tools: `find_race`, `run_sql`, `search_docs`, `get_data_coverage`.
-- **Grounded answers:** every fact comes from a tool result, and every tool result gets an evidence ID (E1, E2, ...) that the answer cites.
+- **Grounded answers:** every fact comes from a tool result, and every tool result gets an evidence ID (E1, E2, ...) that the answer cites. The command line shows the IDs; the web app hides them and says how many statements cite a source instead.
 - **Safe SQL:** `run_sql` is SELECT-only, enforced in code (read-only connection, authorizer, row and time limits), not by the prompt.
 - **Honest about gaps:** if the data is missing, the bot says so and states its coverage.
 - **Scope:** Race sessions for the 2024, 2025 and 2026 seasons (completed rounds), lap-level data, ingested manually from the command line.
