@@ -56,7 +56,8 @@ TABLES = {
     "pit_stops": {
         "about": "Pit stops with pit-lane time only, stationary time is not available",
         "columns": {
-            "season": "", "round": "", "driver_code": "", "stop_no": "", "lap": "",
+            "season": "", "round": "", "driver_code": "", "stop_no": "",
+            "lap": "the lap the car came in on; use it as the stop's lap",
             "pit_lane_time_s": "seconds from pit entry to pit exit",
         },
     },
@@ -94,8 +95,12 @@ DATA_NOTES = [
     "A red flag is a race_control row whose message starts with 'RED FLAG' "
     "(message LIKE 'RED FLAG%'); it is not in the flag column.",
     "Safety car periods start with race_control category 'SafetyCar' and message "
-    "'SAFETY CAR DEPLOYED'; virtual safety car periods with message 'VSC DEPLOYED'.",
+    "'SAFETY CAR DEPLOYED'; virtual safety car periods with message 'VSC DEPLOYED' (2026) "
+    "or 'VIRTUAL SAFETY CAR DEPLOYED' (2024 and 2025), so match both.",
     "Pit data is pit-lane time, never stationary time. Say so when you report it.",
+    "Cars waiting in the pit lane during a red flag are stored as stops lasting many minutes. "
+    "Leave out stops with pit_lane_time_s > 120 when comparing or ranking pit stops, "
+    "and say they were red-flag stops.",
     "Compound can be UNKNOWN when the source did not report it.",
     "Rounds are numbered among races that were held; cancelled races are not stored.",
 ]
@@ -143,7 +148,7 @@ FINAL_INSTRUCTION = (
     "(season and round). Choose up to four of classification (final order), lap_time_chart "
     "(lap times of the given drivers, optional laps as [first, last]), tyre_strategy, "
     "pit_stops_table, position_chart and race_summary_card, plus driver_card for the drivers "
-    "the answer is about. At most four drivers per widget, driver codes and evidence ids only "
+    "the answer is about. At most five drivers per widget, driver codes and evidence ids only "
     "from the tool results. The charts get their numbers from the database, so never put "
     "numbers in the dashboard. Leave dashboard out when no race data was used."
 )

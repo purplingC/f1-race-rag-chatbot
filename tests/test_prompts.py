@@ -46,3 +46,11 @@ def test_final_answer_asks_for_a_dashboard_from_the_widget_registry():
     assert prompts.ANSWER_SCHEMA["required"] == ["answer_md"]
     for widget_type in widget_types:
         assert widget_type in prompts.FINAL_INSTRUCTION
+
+
+def test_prompt_explains_vsc_wordings_pit_laps_and_red_flag_stops():
+    """Check the model learns both VSC wordings, what a stop's lap is and the red-flag stops"""
+    text = prompts.system_prompt()
+    assert "'VIRTUAL SAFETY CAR DEPLOYED'" in text and "'VSC DEPLOYED'" in text
+    assert "lap the car came in" in text
+    assert "pit_lane_time_s > 120" in text

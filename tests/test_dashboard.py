@@ -225,3 +225,34 @@ def test_drivers_named_in_the_question_are_the_ones_shown(conn):
     assert by_name.spec.widgets[0].drivers == ["BBB"]
     unnamed = dashboard.plan("Why did they lose a position?", None, log, conn)
     assert unnamed.spec.widgets[0].drivers == ["AAA", "CCC", "BBB"]
+
+
+def add_drivers(conn, *codes):
+    """Add placeholder drivers to round 1 so a widget can name more of them"""
+    with conn:
+        conn.executemany(
+            "INSERT INTO entries (season, round, driver_code, team) VALUES (2026, 1, ?, 'T')",
+            [(code,) for code in codes],
+        )
+
+
+def test_a_top_five_question_keeps_all_five_drivers(conn):
+    """Check five drivers per widget are accepted, so a top-five answer shows all of them"""
+    add_drivers(conn, "EEE", "FFF")
+    five = ["AAA", "BBB", "CCC", "DDD", "EEE"]
+    result, problems = dashboard.validate(
+        spec({"type": "driver_card", "drivers": five}), conn, evidence("E1"))
+    assert problems == [] and result.widgets[0].drivers == five
+    result, problems = dashboard.validate(
+        spec({"type": "driver_card", "drivers": five + ["FFF"]}), conn, evidence("E1"))
+    assert result is None and any("more than 5 drivers" in p for p in problems)
+
+
+def test_fallback_keeps_five_drivers_from_the_rows(conn):
+    """Check the rule-based planner takes up to five drivers from the SQL rows"""
+    log = EvidenceLog()
+    rows = [[code] for code in ("AAA", "BBB", "CCC", "DDD", "EEE", "FFF")]
+    log.add("run_sql", {"query": "SELECT 1"}, {"ok": True, "rows": rows, "row_count": 6})
+    known = {"AAA", "BBB", "CCC", "DDD", "EEE", "FFF"}
+    assert dashboard.drivers_from_evidence(log, "Fastest five?", known) == [
+        "AAA", "BBB", "CCC", "DDD", "EEE"]

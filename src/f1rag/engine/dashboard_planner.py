@@ -14,7 +14,8 @@ WidgetType = Literal[
 NOT_MAIN = {"driver_card"}
 NEEDS_DRIVERS = {"driver_card", "lap_time_chart"}
 MAX_MAIN = 4
-MAX_DRIVERS = 4
+# Five, so a top-five answer shows every driver it names
+MAX_DRIVERS = 5
 
 # Question types for the fallback planner, checked in this order (Section 7.4 table)
 QUESTION_TYPES = [
