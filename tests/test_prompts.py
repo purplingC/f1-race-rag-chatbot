@@ -72,3 +72,8 @@ def test_prompt_needs_a_tool_call_and_sends_careers_to_the_reports():
     text = prompts.system_prompt()
     assert "at least one tool" in text
     assert "debut" in text and "only holds the 2024, 2025 and 2026 seasons" in text
+
+
+def test_prompt_says_race_data_wins_over_report_numbers():
+    """Check numbers such as laps come from the race data when a report gives another"""
+    assert "the race data wins" in prompts.system_prompt()

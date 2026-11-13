@@ -197,7 +197,7 @@ category = "narrative"
 question = "Why did Lando Norris retire from the 2025 Dutch Grand Prix?"
 race = [2025, 15]
 tools = ["search_docs"]
-keywords = [["oil", "smoke"]]
+keywords = [["oil", "smok"]]
 
 [[question]]
 id = "N06"

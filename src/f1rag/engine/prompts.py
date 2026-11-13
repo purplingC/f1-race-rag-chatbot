@@ -98,6 +98,9 @@ DATA_NOTES = [
     "'SAFETY CAR DEPLOYED'; virtual safety car periods with message 'VSC DEPLOYED' (2026) "
     "or 'VIRTUAL SAFETY CAR DEPLOYED' (2024 and 2025), so match both.",
     "Pit data is pit-lane time, never stationary time. Say so when you report it.",
+    "For laps, times, positions and counts the race data wins: when a race report gives a "
+    "different number (reports often count a pit stop by the out lap), state the race data's "
+    "number and cite the race data.",
     "Cars waiting in the pit lane during a red flag are stored as stops lasting many minutes. "
     "Leave out stops with pit_lane_time_s > 120 when comparing or ranking pit stops, "
     "and say they were red-flag stops.",

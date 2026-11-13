@@ -308,3 +308,10 @@ def test_metrics_compare_results_with_the_targets():
     assert rows["Groundedness (automatic)"]["met"] is None
     # A category with no questions is shown as not run rather than as a pass
     assert rows["Hybrid answers"]["result"] == "not run"
+
+
+def test_unsupported_numbers_skip_rank_cells_in_a_table():
+    """Check a rank column such as | 1 | in a Markdown table is not flagged"""
+    bundle = answer("| Rank | Driver |\n|---|---|\n| 1 | Aardvark [E1] |\n| 2 | Belanger |",
+                    evidence=[sql_item()])
+    assert golden.unsupported_numbers(bundle) == []

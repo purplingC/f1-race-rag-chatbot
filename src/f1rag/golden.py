@@ -35,6 +35,8 @@ CITATIONS = re.compile(r"\[E\d+(?:\s*,\s*E\d+)*\]")
 NUMBER = re.compile(r"(?<![\w.])(?:(\d+):(\d{2}(?:\.\d+)?)|(\d+(?:\.\d+)?))(?![\d:])")
 # A list number such as "1." at the start of a line or after a colon or citation
 LIST_MARKER = re.compile(r"(?:^|(?<=[:\]]))\s*\d{1,2}\.(?=\s)", re.M)
+# A rank in the first cell of a Markdown table row, as in | 1 | Hamilton |, even on one line
+RANK_CELL = re.compile(r"(?:^|\|\s*)\|\s*\d{1,2}\s*(?=\|)", re.M)
 WORD_NUMBER = re.compile(r"\b(" + "|".join(NUMBER_WORDS) + r")\b")
 # Targets from Section 9.3 of the technical documentation
 TARGETS = {
@@ -344,6 +346,7 @@ def unsupported_numbers(bundle):
     known = evidence_numbers([item.result for item in bundle.evidence])
     known += [number for _, number, _ in numbers_in(bundle.question, words=False)]
     text = LIST_MARKER.sub(lambda m: " " * len(m.group()), bundle.answer_md or "")
+    text = RANK_CELL.sub(lambda m: " " * len(m.group()), text)
     text = without_citations(text)
     unsupported = []
     for match in NUMBER.finditer(text):
