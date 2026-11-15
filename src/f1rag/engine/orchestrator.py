@@ -64,8 +64,10 @@ class Session:
     """State of one question: the conversation, the evidence and the trace"""
 
     def __init__(self, llm, conn, collection):
-        """Start with no evidence and no trace"""
+        """Start with no evidence and no trace, and the system prompt with the loaded races"""
         self.llm, self.conn, self.collection = llm, conn, collection
+        # The race list lets the model skip find_race, which saves a Gemini call per question
+        self.system = prompts.system_prompt(tools.get_data_coverage(conn)["races"])
         self.evidence = EvidenceLog()
         self.trace = []
         self.sql_errors = 0
@@ -75,7 +77,7 @@ class Session:
         """Call the model once and record how long it took and how often it retried"""
         started = time.monotonic()
         try:
-            reply = self.llm.generate(contents, prompts.system_prompt(), **kwargs)
+            reply = self.llm.generate(contents, self.system, **kwargs)
         except LLMUnavailableError:
             # A call that gave up still shows in the trace, with the time it cost
             self.model_calls.append({

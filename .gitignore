@@ -22,6 +22,9 @@ data/team_logos/
 data/*.db
 data/chroma/
 
+# Evaluation reports, made by python -m f1rag.eval
+data/eval/
+
 # Local planning docs: not committed for now
 docs/
 

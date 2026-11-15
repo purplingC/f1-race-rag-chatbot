@@ -1,6 +1,6 @@
 # F1 Race Summarizer & RAG Chatbot
 
-Answers Formula 1 race questions from ingested data by routing to SQL (statistics), a vector DB (narrative text), or both, and cites evidence for every fact. Goal: showcase RAG, vector search, LLM tool calling, grounded answers and clear data provenance. Python.
+Answers Formula 1 race questions from ingested data by routing to SQL (statistics), a vector DB (narrative text), or both, and cites evidence for every fact. Goal: the owner's personal project to learn and apply RAG, vector search, LLM tool calling, grounded answers and clear data provenance. Python. Never describe it as built for reviewers, recruiters or a portfolio.
 
 **Source of truth:** the technical documentation, `docs/F1_RAG_Chatbot_Planning_Design.docx` (Word). When the owner says "technical documentation", this is the file. Edit it in place with python-docx so its styles, tables, images and contents page are kept. Read the relevant section before building. If code and the doc disagree, ask. When a decision changes, update the doc and this file. Anything outside the MVP is a Future Enhancement (Section 13): do not build it.
 
