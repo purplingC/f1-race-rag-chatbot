@@ -50,7 +50,7 @@ def get_collection():
     """Open the vector store once per session"""
     if "collection" not in st.session_state:
         st.session_state["collection"] = vectors.open_collection(
-            Path(setting("chroma_path", config.CHROMA_DIR)),
+            Path(setting("chroma_path", config.query_paths()[1])),
             embedding_function=setting("embedding_function", None),
         )
     return st.session_state["collection"]
@@ -246,7 +246,8 @@ def main():
     load_dotenv()
     st.html(theme.page_css())
     st.session_state.setdefault("turns", [])
-    db_path = Path(setting("db_path", config.DB_PATH))
+    default_db, _, is_sample = config.query_paths()
+    db_path = Path(setting("db_path", default_db))
     if not db_path.exists():
         st.error(f"No database at {db_path}. Load races first: python -m f1rag.ingest "
                  "--year 2026 --all")
@@ -254,6 +255,9 @@ def main():
     show = setting("show_headshots", avatars.headshots_enabled())
     with contextlib.closing(sql_guard.connect_read_only(db_path)) as conn:
         race = banner(conn)
+        if setting("sample", is_sample):
+            st.caption("Showing the bundled sample data: three races. Load the full seasons with "
+                       "python -m f1rag.ingest --year 2026 --all")
         left, right = st.columns([11, 8], gap="medium")
         with left:
             dashboard(conn, race, show)
