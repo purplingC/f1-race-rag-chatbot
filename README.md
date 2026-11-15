@@ -2,7 +2,7 @@
 
 Ask questions about Formula 1 races and get answers with their sources. Each question is routed to SQL for statistics, a vector store for race reports, or both, and the dashboard shows the data behind the answer. Python, OpenF1, SQLite, ChromaDB, Gemini and Streamlit, all on free tiers.
 
-**Status:** version 0.5. Phases 0–4 of 5 done; 68 races loaded (all completed races of 2024, 2025 and 2026). Next: final polish and release.
+**Status:** version 1.0, all five phases complete. Covers all completed races of 2024, 2025 and 2026. How it is built: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## How it works
 
@@ -23,13 +23,17 @@ cp .env.example .env    # then set GEMINI_API_KEY (free key from Google AI Studi
 
 ## Use
 
+A fresh clone works straight away on the bundled sample: three races in `sample/` (see its [data notice](sample/DATA_NOTICE.md)).
+
 ```bash
-python -m f1rag.ingest --year 2026 --all        # load a season (resumable; --gp "<name>" for one race)
 streamlit run src/f1rag/ui/app.py               # web app at http://localhost:8501
-python -m f1rag.ask "Who won the 2026 Bahrain Grand Prix?" --trace   # terminal, with every tool call
+python -m f1rag.ask "Why was the 2026 Bahrain Grand Prix held in Malaysia?" --trace   # terminal, every tool call
+python -m f1rag.ingest --year 2026 --all        # load full seasons (resumable; --gp "<name>" for one race)
 ```
 
-`--only data|text|summary` loads one part. Data stays local in `data/` (git-ignored). One question uses about 3 to 4 of Gemini's 500 free daily requests.
+Once full data is loaded into `data/` (git-ignored), it is used instead of the sample. `--only data|text|summary` loads one part. One question uses about 3 to 4 of Gemini's 500 free daily requests; the first question downloads ChromaDB's small embedding model once (about 83 MB).
+
+**Runs locally only:** the app listens on this computer. Hosting it online is a possible future step, not part of this version.
 
 **Optional, local only:** official driver photos (`python -m f1rag.ingest.headshots`, then `SHOW_HEADSHOTS=true`) and team logos (`python -m f1rag.ingest.team_logos`, then `SHOW_TEAM_LOGOS=true`). They are never committed and stay off in public demos.
 
@@ -39,7 +43,7 @@ python -m f1rag.ask "Who won the 2026 Bahrain Grand Prix?" --trace   # terminal,
 
 ```bash
 python -m f1rag.eval --check    # expected answers only, no Gemini calls
-python -m f1rag.eval            # full run, about 105 requests and 18 minutes
+python -m f1rag.eval            # full run on the full data, about 105 requests and 18 minutes
 ```
 
 Latest run, 15 November 2026, `gemini-3.5-flash-lite`:

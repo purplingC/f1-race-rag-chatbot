@@ -69,7 +69,7 @@ def stores(tmp_path, fake_embedding):
     return db, chroma, fake_embedding
 
 
-def start(stores, llm=None):
+def start(stores, llm=None, sample=False):
     """Run the app once with the placeholder stores and an optional scripted model"""
     db, chroma, embedding = stores
     at = AppTest.from_file(APP, default_timeout=60)
@@ -78,6 +78,7 @@ def start(stores, llm=None):
     at.session_state["embedding_function"] = embedding
     at.session_state["show_headshots"] = False
     at.session_state["show_team_logos"] = False
+    at.session_state["sample"] = sample
     if llm is not None:
         at.session_state["llm"] = llm
     return at.run()
@@ -218,3 +219,12 @@ def test_page_has_no_stripe_across_the_top():
     from f1rag.ui import theme
 
     assert "::before" not in theme.page_css()
+
+
+def test_sample_data_is_named_on_the_page(stores):
+    """Check the page says when it shows the bundled sample instead of the full data"""
+    at = start(stores, sample=True)
+    assert not at.exception
+    assert "sample data" in " ".join(c.value for c in at.caption).lower()
+    full = start(stores)
+    assert "sample data" not in " ".join(c.value for c in full.caption).lower()

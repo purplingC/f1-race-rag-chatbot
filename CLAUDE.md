@@ -38,6 +38,7 @@ python -m f1rag.ingest.team_logos --season 2026   # local team logos + review sh
 streamlit run src/f1rag/ui/app.py
 pytest && ruff check .
 python -m f1rag.eval
+python -m f1rag.sample   # rebuild the committed three-race sample in sample/ from data/
 ```
 
 ## Workflow

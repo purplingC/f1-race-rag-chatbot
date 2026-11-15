@@ -18,12 +18,15 @@ data/cache/
 data/headshots/
 data/team_logos/
 
-# Full local databases: the small sample database is added on purpose later
+# Full local databases (the small sample in sample/ is committed on purpose)
 data/*.db
 data/chroma/
 
 # Evaluation reports, made by python -m f1rag.eval
 data/eval/
+
+# Working copy of the sample, made by the app because ChromaDB writes to its folder
+data/sample/
 
 # Local planning docs: not committed for now
 docs/

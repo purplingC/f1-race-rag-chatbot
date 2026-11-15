@@ -26,11 +26,13 @@ def parse_args(argv=None):
     )
     parser.add_argument("question", help="the question, in quotes")
     parser.add_argument("--trace", action="store_true", help="also show every tool call in full")
+    db_path, chroma_path, _ = config.query_paths()
     parser.add_argument(
-        "--db", default=str(config.DB_PATH), help="database file, default data/f1_stats.db"
+        "--db", default=str(db_path), help="database file, default data/f1_stats.db or the sample"
     )
     parser.add_argument(
-        "--chroma", default=str(config.CHROMA_DIR), help="vector store folder, default data/chroma"
+        "--chroma", default=str(chroma_path), help="vector store folder, default data/chroma or "
+        "the sample"
     )
     return parser.parse_args(argv)
 
